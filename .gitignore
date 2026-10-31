@@ -8,3 +8,6 @@ __pycache__/
 # Log chay (co the chua duong dan may cuc bo)
 reports_openai/run.log
 reports/run.log
+train/
+.venv
+reports_openai
