@@ -438,6 +438,118 @@ class TestPromptAndBackend(unittest.TestCase):
         # Top product theo số lượng, không phải doanh thu.
         self.assertIn("ranking_metric=quantity", prompt)
 
+    def test_build_prompt_co_measure_moi_va_quy_tac_ky_tuong_doi(self):
+        """Prompt tuning đợt 2: 4 measure mới, kỳ tương đối khóa chặt, chống đoán measure.
+
+        Bốn measure mới phải có trong enum và trong bảng quyết định với
+        đúng ngữ nghĩa đã thống nhất với solver: avg_order_value là
+        bình quân mỗi đơn (không phải tổng revenue), cancelled_order_count
+        là số đơn huỷ (không phải tổng order_count), unsold_product_count
+        là số mặt hàng khác nhau bán được 0 cái (không phải quantity hay
+        order_count), revenue_by_month là list theo từng tháng (không cộng
+        gộp). Kỳ tương đối phải khóa theo as_of (tuần bắt đầu thứ Hai,
+        7/30 ngày gần nhất tính lùi gồm as_of, từ đầu tháng/năm đến as_of).
+        Quy tắc chống đoán phải buộc measure='unknown' khi không có measure
+        khớp đúng, thay vì chọn measure gần nhất để lấp chỗ trống. Test chỉ
+        kiểm tra prompt chứa các quy tắc này, không dùng đáp án train nào.
+        """
+        self.assertIn("avg_order_value", MEASURE_VALUES)
+        self.assertIn("cancelled_order_count", MEASURE_VALUES)
+        self.assertIn("unsold_product_count", MEASURE_VALUES)
+        self.assertIn("revenue_by_month", MEASURE_VALUES)
+        prompt = build_prompt(
+            "thang 5/2025 doanh thu trung binh tren mot don la bao nhieu",
+            "thang 5/2025 doanh thu trung binh tren mot don la bao nhieu",
+            _AS_OF, _PRODUCTS, _CUSTOMERS,
+            ["Nước giải khát"], ["tiền mặt"],
+            "Tuan bat dau thu Hai.",
+        )
+        # Bảng quyết định cho 4 measure mới, đúng ngữ nghĩa đã thống nhất.
+        self.assertIn("avg_order_value", prompt)
+        self.assertIn("KHÔNG chọn revenue", prompt)
+        self.assertIn("cancelled_order_count", prompt)
+        self.assertIn("KHÔNG chọn order_count", prompt)
+        self.assertIn("unsold_product_count", prompt)
+        self.assertIn("revenue_by_month", prompt)
+        self.assertIn("period_kind=multi_month", prompt)
+        # Kỳ tương đối khóa chặt theo as_of, tuần bắt đầu thứ Hai.
+        self.assertIn("tuần rồi", prompt)
+        self.assertIn("tuần này", prompt)
+        self.assertIn("7 ngày gần nhất", prompt)
+        self.assertIn("từ đầu tháng này đến hết hôm nay", prompt)
+        self.assertIn("period_kind=absolute", prompt)
+        # Tăng trưởng MTD: so cùng kỳ tháng trước, không dùng cả tháng đầy đủ.
+        self.assertIn("cùng kỳ tháng trước", prompt)
+        self.assertIn("growth_percent", prompt)
+        # Tỉ lệ khách: mẫu số là khách đã mua trong tháng đó.
+        self.assertIn("ĐÃ MUA trong tháng", prompt)
+        # 'Bao nhiêu tiền' là number, kể cả khi câu nhắc tháng.
+        self.assertIn("answer_type=number", prompt)
+        # Top khách: không chọn khách vãng lai làm thực thể.
+        self.assertIn("Khách lẻ", prompt)
+        self.assertIn("KHÔNG được chọn khách vãng lai", prompt)
+        # Quy tắc chống đoán: không có measure khớp đúng thì unknown.
+        self.assertIn("QUY TẮC CHỐNG ĐOÁN MEASURE", prompt)
+        self.assertIn("measure='unknown'", prompt)
+        self.assertIn("KHÔNG chọn measure gần nhất", prompt)
+        # Ví dụ minh họa mới phải có, nhưng không chứa business_id hay id câu hỏi.
+        self.assertIn("avg_order_value", prompt)
+        self.assertIn("cancelled_order_count", prompt)
+        self.assertIn("revenue_by_month", prompt)
+        self.assertIn("growth_percent", prompt)
+        # Các quy tắc cũ không được mất khi thêm quy tắc mới.
+        self.assertIn("best_day", prompt)
+        self.assertIn("price_on_day", prompt)
+        self.assertIn("KHÔNG dùng snapshot", prompt)
+
+    def test_validate_and_build_chap_nhan_measure_moi(self):
+        """Validate phải chấp nhận 4 measure mới (qua MEASURE_VALUES), không cần sửa logic validate.
+
+        Mỗi measure mới được test với một JSON hợp lệ tối thiểu: kỳ absolute
+        đầy đủ start/end (riêng revenue_by_month dùng multi_month với
+        period_months tăng dần), entity_kind=none, answer_type đúng với
+        định nghĩa đã thống nhất. Đây là dữ liệu giả tự tạo, không phải
+        đáp án train.
+        """
+        base = {
+            "entity_kind": "none",
+            "period_start": "2025-05-01",
+            "period_end": "2025-05-31",
+            "period_kind": "absolute",
+            "period_months": [],
+            "ranking_k": None,
+            "ranking_target": "none",
+            "ranking_metric": None,
+            "unit": None,
+            "threshold_money": None,
+            "threshold_op": None,
+            "confidence_parse": 0.9,
+            "parse_notes": ["test"],
+            "normalized_text": "test",
+        }
+        cases = [
+            ("avg_order_value", "number", dict(base)),
+            ("cancelled_order_count", "number", dict(base)),
+            ("unsold_product_count", "number", dict(base)),
+        ]
+        for measure, answer_type, data in cases:
+            data.update({"measure": measure, "answer_type": answer_type})
+            parsed = validate_and_build(data, _PRODUCTS, _CUSTOMERS)
+            self.assertEqual(parsed.measure, measure)
+            self.assertEqual(parsed.answer_type, answer_type)
+        monthly = dict(base)
+        monthly.update({
+            "measure": "revenue_by_month",
+            "answer_type": "list",
+            "period_kind": "multi_month",
+            "period_start": "2025-10-01",
+            "period_end": "2025-12-31",
+            "period_months": [[2025, 10], [2025, 11], [2025, 12]],
+        })
+        parsed = validate_and_build(monthly, _PRODUCTS, _CUSTOMERS)
+        self.assertEqual(parsed.measure, "revenue_by_month")
+        self.assertEqual(parsed.answer_type, "list")
+
     def test_transformers_backend_bao_loi_ro_rang_khi_khong_kha_dung(self):
         """Ở môi trường không có transformers/weights, backend phải raise RuntimeError, không trả JSON giả."""
         backend = TransformersBackend("model-chua-kiem-chung/test")

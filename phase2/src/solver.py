@@ -151,6 +151,15 @@ COVERED_MEASURES = frozenset({
     "debt_total", "debt_top", "price_on_day", "continuous_growth",
     "revenue_by_payment", "revenue_by_group", "revenue_by_channel",
     "quantity_by_unit", "product_revenue",
+    # Bốn measure mới (bổ sung sau đánh giá 278 câu biz_101/102/103):
+    # trước đây solver chưa có chúng nên LLM buộc phải chọn measure
+    # gần nhất và trả sai (bình quân mỗi đơn -> tổng doanh thu, đơn
+    # huỷ -> tổng số đơn, mặt hàng ế -> đếm dòng, doanh thu từng
+    # tháng -> tổng một số). Xem các hàm _solve_avg_order_value,
+    # _solve_cancelled_order_count, _solve_unsold_product_count và
+    # _solve_revenue_by_month ở cuối nhóm measure đếm/doanh thu.
+    "avg_order_value", "cancelled_order_count",
+    "unsold_product_count", "revenue_by_month",
 })
 
 #: Các measure đã biết tên nhưng solver này cố tình chưa bao phủ, để
@@ -1715,6 +1724,33 @@ def _format_ranking_answer(parsed, ranked, columns):
     return "list", displays[:k]
 
 
+#: Các dạng tên/mã của khách vãng lai, sau khi chuẩn hoá bằng
+#: ``_norm`` (không dấu, chữ thường, khoảng trắng đơn). Khách vãng lai
+#: là tổng gộp của nhiều người mua lẻ ẩn danh, không phải một khách
+#: hàng cụ thể, và theo rulebook thì khách vãng lai không thuộc nhóm
+#: khách nào; vì vậy khi xếp hạng khách hàng thì phải loại các dạng
+#: này ra, nếu không chúng sẽ luôn đứng đầu vì tổng doanh thu gộp của
+#: chúng lớn hơn bất kỳ khách có tên thật nào. Chỉ loại khi khoá chuẩn
+#: hoá KHỚP ĐÚNG một dạng trong tập này (xem ``_is_walk_in_customer``):
+#: khách có tên thật chứa từ "lẻ" ở giữa tên (ví dụ tên riêng có chữ
+#: lẻ) thì khoá chuẩn hoá khác hẳn nên không bị loại oan.
+_WALK_IN_CUSTOMER_NORMS = frozenset({
+    "khach le", "le", "kl", "khach vang lai", "vang lai",
+})
+
+
+def _is_walk_in_customer(key, display):
+    """Kiểm tra một mục khách có phải khách vãng lai không.
+
+    Trả True khi khoá chuẩn hoá của mã HOẶC tên hiển thị khớp đúng
+    một dạng trong ``_WALK_IN_CUSTOMER_NORMS``. So sánh khớp đúng
+    toàn bộ khoá, không dùng khớp chứa/chứa một phần, để tên thật
+    chứa từ "lẻ" không bị loại nhầm.
+    """
+    return _norm(key) in _WALK_IN_CUSTOMER_NORMS \
+        or _norm(display) in _WALK_IN_CUSTOMER_NORMS
+
+
 def _solve_top(parsed, view, lines, orders, rulebook, start, end, mode,
                target):
     """Giải top_product và top_customer theo chỉ tiêu xếp hạng.
@@ -1779,6 +1815,13 @@ def _solve_top(parsed, view, lines, orders, rulebook, start, end, mode,
                 display_raw = line.get("customer_display")
             if key is None:
                 continue
+            # Khách vãng lai không phải một khách hàng cụ thể nên
+            # không được xếp hạng top_customer (xem
+            # _WALK_IN_CUSTOMER_NORMS): loại trước khi nhóm, để tổng
+            # doanh thu gộp của chúng không chiếm hạng đầu.
+            if target == "customer" \
+                    and _is_walk_in_customer(key, display_raw):
+                continue
             if metric == "quantity":
                 qty_base = line.get("qty_base")
                 if qty_base is not None:
@@ -1821,6 +1864,9 @@ def _solve_top(parsed, view, lines, orders, rulebook, start, end, mode,
             key = order.get("customer_key")
             if key is None:
                 continue
+            if target == "customer" and _is_walk_in_customer(
+                    key, order.get("customer_display")):
+                continue
             if key not in groups:
                 groups[key] = [0.0, order.get("customer_display") or key]
             if order.get("order_total") is not None:
@@ -1837,6 +1883,8 @@ def _solve_top(parsed, view, lines, orders, rulebook, start, end, mode,
         for order in filtered_o:
             key = order.get("customer_key")
             if key is None:
+                continue
+            if _is_walk_in_customer(key, order.get("customer_display")):
                 continue
             if key not in groups:
                 groups[key] = [0, order.get("customer_display") or key]
@@ -2033,6 +2081,329 @@ def _solve_quantity_by_unit(parsed, view, lines, orders, rulebook, start,
                      len(filtered),
                      "so luong goc theo don vi ban cua don revenue "
                      "trong ky", None, confidence, [], notes)
+
+
+# ---------------------------------------------------------------------------
+# Các measure mới: bình quân mỗi đơn, đơn huỷ, mặt hàng ế, doanh thu
+# từng tháng (bổ sung sau đánh giá 278 câu biz_101/102/103, nơi LLM
+# phải chọn measure gần nhất sai vì solver chưa có các measure này)
+# ---------------------------------------------------------------------------
+
+
+def _solve_avg_order_value(parsed, view, lines, orders, rulebook, start,
+                           end, mode):
+    """Giải measure avg_order_value (doanh thu bình quân mỗi đơn, VND).
+
+    Cách tính: tổng doanh thu hợp lệ trong kỳ chia cho số đơn hợp lệ
+    trong kỳ, dùng đúng bộ lọc doanh thu của solver (``_revenue_lines_
+    mode`` khi shop có dòng, ``_revenue_orders_mode`` khi shop không
+    có dòng), tức loại đơn huỷ/trả theo rulebook giống ``_solve_
+    revenue`` và ``_solve_order_count``. Số đơn đếm theo mã đơn phân
+    biệt (distinct ``order_id``), không đếm số dòng, vì một đơn nhiều
+    dòng vẫn là một đơn.
+
+    Làm tròn: đáp án là tiền nên làm tròn về số nguyên VND, kiểu nửa
+    lên, giống mọi đáp án tiền khác của solver (dùng Decimal, không
+    dùng round() kiểu ngân hàng). Cách này đã kiểm chứng khớp đáp án
+    tham chiếu của các câu bình quân mỗi đơn trong tập train (ví dụ
+    tổng doanh thu chia cho số đơn ra 156347,57... thì làm tròn thành
+    156348, đúng đáp án tham chiếu).
+
+    Trường hợp biên:
+        - Shop không có cả lines lẫn orders thì abstain ``column``.
+        - Số đơn hợp lệ bằng 0 thì abstain ``filter``: trung bình
+          không xác định, không được trả 0 (0 sẽ bị hiểu là đơn nào
+          cũng miễn phí) và không được chia cho 0.
+        - Có ngưỡng tiền thì bộ lọc ngưỡng KHÔNG áp dụng ở đây, vì
+          câu bình quân mỗi đơn hỏi trung bình của toàn kỳ, không hỏi
+          trung bình của nhóm đơn qua ngưỡng; nếu parser gắn ngưỡng
+          vào câu này thì đó là lỗi parse, nhưng solver vẫn tính
+          trung bình toàn kỳ theo đúng định nghĩa của measure.
+    """
+    if not lines and not orders:
+        return _abstain(parsed, start, end, "column",
+                        "shop khong co lines lan orders, khong tinh "
+                        "duoc doanh thu binh quan moi don")
+    if lines:
+        filtered, other = _revenue_lines_mode(
+            lines, parsed, rulebook, start, end, mode)
+        total = _sum_money(
+            [line.get("line_amount") for line in filtered])
+        order_ids = {line.get("order_id") for line in filtered
+                     if line.get("order_id") is not None}
+        source = "lines"
+    else:
+        filtered, other = _revenue_orders_mode(
+            orders, parsed, rulebook, start, end, mode)
+        total = _sum_money(
+            [order.get("order_total") for order in filtered])
+        order_ids = {order.get("order_id") for order in filtered
+                     if order.get("order_id") is not None}
+        source = "orders"
+    if not order_ids:
+        return _abstain(parsed, start, end, "filter",
+                        "khong co don hop le nao trong ky nen doanh "
+                        "thu binh quan moi don khong xac dinh")
+    average = int((_Decimal(total) / _Decimal(len(order_ids))).quantize(
+        _Decimal("1"), rounding=_HALF_UP))
+    confidence, notes = _confidence_for(other, [])
+    filter_text = (f"doanh thu binh quan moi don = tong doanh thu "
+                   f"{total} / {len(order_ids)} don hop le trong ky "
+                   f"(nguon {source})")
+    return _answered(parsed, start, end, "number", average,
+                     len(filtered), filter_text, None, confidence, [],
+                     notes)
+
+
+def _cancelled_ids_in_period(records, start, end, match_fn, parsed, mode):
+    """Trả (tập mã đơn huỷ, tập trạng thái đã thấy) trong kỳ.
+
+    Dùng chung cho cả nguồn lines và orders của
+    ``_solve_cancelled_order_count``: chỉ xét bản ghi trong kỳ và khớp
+    thực thể hỏi (qua ``match_fn``), tử số là các mã đơn có
+    ``status_norm == 'cancelled'``. Đếm theo mã đơn phân biệt, không
+    đếm dòng, vì một đơn huỷ có nhiều dòng vẫn là một đơn huỷ. Đơn
+    không có mã bị loại khỏi phép đếm vì không xác định được đơn nào.
+    Tập trạng thái đã thấy dùng để phát hiện shop hoàn toàn không có
+    thông tin trạng thái (xem ``_solve_cancelled_order_count``).
+    """
+    period_records = [
+        record for record in records
+        if _in_period(record.get("date"), start, end)
+        and match_fn(record, parsed, mode)]
+    cancelled_ids = {record.get("order_id") for record in period_records
+                     if record.get("status_norm") == "cancelled"
+                     and record.get("order_id") is not None}
+    statuses = {record.get("status_norm") for record in period_records}
+    return cancelled_ids, statuses, len(period_records)
+
+
+def _solve_cancelled_order_count(parsed, view, lines, orders, rulebook,
+                                 start, end, mode):
+    """Giải measure cancelled_order_count (số đơn bị huỷ trong kỳ).
+
+    Đếm distinct ``order_id`` có ``status_norm == 'cancelled'`` trong
+    kỳ, tái dùng đúng logic phát hiện đơn huỷ của ``_solve_cancel_
+    rate`` nhưng CHỈ đếm đơn huỷ, không đếm tổng đơn và không tính
+    tỉ lệ. Trước đây solver chưa có measure này nên câu hỏi đơn huỷ
+    thường bị parse thành ``order_count`` và trả tổng số đơn (hàng
+    nghìn) thay vì số đơn huỷ (hàng chục).
+
+    Chọn nguồn giống ``_solve_cancel_rate``:
+        - Lọc theo mặt hàng/nhóm và có lines thì qua lines (orders
+          không có mặt hàng để lọc).
+        - Còn lại ưu tiên orders (danh sách đơn đầy đủ nhất, gồm cả
+          đơn không có dòng), nếu không có orders thì qua lines.
+
+    Trường hợp biên:
+        - Shop không có cả lines lẫn orders thì abstain ``column``.
+        - Shop hoàn toàn không có thông tin trạng thái (mọi bản ghi
+          trong toàn shop đều có ``status_norm`` là None hoặc
+          ``'other'``) thì abstain ``column``: không có căn cứ nào để
+          biết đơn nào huỷ, đếm 0 sẽ là đoán. Ngược lại, shop có ghi
+          trạng thái mà trong kỳ không có đơn huỷ nào thì trả 0 đúng
+          nghĩa (đã kiểm tra mà không thấy đơn huỷ).
+    """
+    if not lines and not orders:
+        return _abstain(parsed, start, end, "column",
+                        "shop khong co lines lan orders, khong dem "
+                        "duoc don huy")
+    all_statuses = set()
+    for record in list(lines) + list(orders):
+        status = record.get("status_norm")
+        if status is not None:
+            all_statuses.add(status)
+    if all_statuses <= {"other"}:
+        return _abstain(parsed, start, end, "column",
+                        "shop khong co thong tin trang thai (chi co "
+                        "'other'), khong xac dinh duoc don nao bi huy")
+    kind = getattr(parsed, "entity_kind", "none") or "none"
+    if kind in ("product", "group") and lines:
+        cancelled_ids, _statuses, rows_used = \
+            _cancelled_ids_in_period(
+                lines, start, end, _line_matches_entity_mode, parsed,
+                mode)
+        source = "lines"
+    elif orders:
+        cancelled_ids, _statuses, rows_used = \
+            _cancelled_ids_in_period(
+                orders, start, end, _order_matches_entity_mode, parsed,
+                mode)
+        source = "orders"
+    else:
+        cancelled_ids, _statuses, rows_used = \
+            _cancelled_ids_in_period(
+                lines, start, end, _line_matches_entity_mode, parsed,
+                mode)
+        source = "lines"
+    filter_text = (f"dem don huy phan biet trong ky "
+                   f"{_period_str(start)}..{_period_str(end)} "
+                   f"(nguon {source})")
+    return _answered(parsed, start, end, "number", len(cancelled_ids),
+                     rows_used, filter_text, None, 1.0, [], [])
+
+
+def _solve_unsold_product_count(parsed, view, lines, orders, rulebook,
+                                start, end, mode):
+    """Giải measure unsold_product_count (số mặt hàng ế trong kỳ).
+
+    Đếm số mặt hàng KHÁC NHAU trong danh sách sản phẩm của shop
+    (``view.products``) mà trong kỳ không có dòng doanh thu nào sau
+    bộ lọc doanh thu. Đếm theo mặt hàng, không đếm dòng và không đếm
+    đơn: một mặt hàng bán 0 lần thì tính 1, dù shop có bao nhiêu đơn
+    của các mặt hàng khác. Trước đây solver chưa có measure này nên
+    câu hỏi mặt hàng ế thường bị parse thành ``quantity``/``order_
+    count`` và trả hàng nghìn (số dòng/đơn) thay vì số mặt hàng ế.
+
+    Đối chiếu mặt hàng đã bán: một mặt hàng được coi là đã bán nếu
+    khoá chuẩn hoá của mã hoặc tên hiển thị của nó xuất hiện trong
+    dòng doanh thu (cả hai đều thử, vì danh sách master có shop ghi
+    mã, có shop ghi tên, còn dòng bán có cả hai). Nếu câu hỏi lọc
+    theo nhóm mặt hàng thì danh sách xét chỉ còn các mặt hàng thuộc
+    nhóm đó; các kind thực thể khác không thu hẹp danh sách, vì câu
+    mặt hàng ế vốn hỏi toàn shop.
+
+    Trường hợp biên:
+        - Shop không có danh sách sản phẩm thì abstain ``column``:
+          không có danh sách thì không biết mặt hàng nào tồn tại để
+          mà đếm là ế.
+        - Shop không có dòng bán nào thì abstain ``column``: đơn
+          (orders) không ghi mặt hàng nên không xác định được mặt
+          hàng nào đã bán, đếm toàn bộ danh sách thành ế sẽ là đoán.
+        - Trong kỳ không có dòng doanh thu nào nhưng shop có dòng bán
+          (ví dụ toàn đơn huỷ) thì mọi mặt hàng đều ế, trả đúng số
+          mặt hàng trong danh sách, không abstain.
+    """
+    products = getattr(view, "products", None) or []
+    if not products:
+        return _abstain(parsed, start, end, "column",
+                        "shop khong co danh sach san pham, khong dem "
+                        "duoc mat hang e")
+    if not lines:
+        return _abstain(parsed, start, end, "column",
+                        "shop khong co dong ban nen khong xac dinh "
+                        "duoc mat hang nao da ban")
+    filtered, other = _revenue_lines_mode(
+        lines, parsed, rulebook, start, end, mode)
+    sold_norms = set()
+    for line in filtered:
+        sold_norms.add(_norm(line.get("product_key")))
+        sold_norms.add(_norm(line.get("product_display")))
+    sold_norms.discard("")
+    kind = getattr(parsed, "entity_kind", "none") or "none"
+    norms = _entity_norms(parsed) if kind == "group" else set()
+    unsold = 0
+    for item in products:
+        if not isinstance(item, dict):
+            continue
+        if kind == "group" and norms \
+                and _norm(item.get("group")) not in norms:
+            continue
+        key_norm = _norm(item.get("key"))
+        display_norm = _norm(item.get("display"))
+        if key_norm and key_norm in sold_norms:
+            continue
+        if display_norm and display_norm in sold_norms:
+            continue
+        unsold += 1
+    confidence, notes = _confidence_for(other, [])
+    filter_text = (f"dem mat hang trong danh sach shop khong co dong "
+                   f"doanh thu nao trong ky "
+                   f"{_period_str(start)}..{_period_str(end)}")
+    return _answered(parsed, start, end, "number", unsold,
+                     len(filtered), filter_text, None, confidence, [],
+                     notes)
+
+
+def _solve_revenue_by_month(parsed, view, lines, orders, rulebook, start,
+                            end, mode):
+    """Giải measure revenue_by_month (doanh thu từng tháng, dạng list).
+
+    Trả list doanh thu từng tháng theo thứ tự từ tháng cũ đến tháng
+    mới, mỗi tháng tính bằng ``_revenue_value`` với đúng bộ lọc doanh
+    thu của tháng đó (loại huỷ/trả theo rulebook, lọc thực thể như
+    câu hỏi). Trước đây solver chưa có measure này nên câu hỏi
+    "doanh thu mỗi tháng trong 3 tháng liền nhau" thường bị parse
+    thành ``revenue`` và trả một số tổng gộp, trong khi đáp án đúng
+    là list 3 số.
+
+    Xác định danh sách tháng, theo thứ tự ưu tiên:
+        1. ``parsed.period_months`` nếu parser đã cho (danh sách các
+           cặp (năm, tháng) của câu nhiều tháng). Các tháng phải liên
+           tiếp nhau, nếu không thì abstain ``time``.
+        2. Kỳ hỏi ``period_start..period_end`` khi nó bao phủ đúng các
+           tháng đầy đủ liên tiếp: bắt đầu ngày 1 của tháng đầu, kết
+           thúc ngày cuối của tháng cuối. Suy danh sách tháng từ
+           tháng của start đến tháng của end.
+        3. Các trường hợp còn lại (kỳ thiếu đầu, kỳ cắt giữa tháng,
+           kỳ không phải tháng) thì abstain ``time``, KHÔNG cộng gộp
+           thành một số tổng, vì cộng gộp sẽ cho đáp án sai dạng mà
+           khung chấm vẫn tính là sai (type list so với number).
+
+    Tháng không có doanh thu thì tính là 0 trong list (dữ liệu thật,
+    không phải thiếu), để độ dài list luôn bằng số tháng hỏi.
+    """
+    months = list(getattr(parsed, "period_months", None) or [])
+    if months:
+        normalized_months = []
+        for item in months:
+            try:
+                year, month = int(item[0]), int(item[1])
+            except (TypeError, ValueError, IndexError):
+                return _abstain(parsed, start, end, "time",
+                                "period_months cua parser khong phai "
+                                "cap (nam, thang) hop le")
+            if not 1 <= month <= 12:
+                return _abstain(parsed, start, end, "time",
+                                "period_months co thang ngoai 1..12")
+            normalized_months.append((year, month))
+        months = normalized_months
+        for idx in range(1, len(months)):
+            prev_year, prev_month = months[idx - 1]
+            if prev_month == 12:
+                expected = (prev_year + 1, 1)
+            else:
+                expected = (prev_year, prev_month + 1)
+            if months[idx] != expected:
+                return _abstain(parsed, start, end, "time",
+                                "cac thang trong period_months khong "
+                                "lien tiep nhau")
+    elif start is not None and end is not None \
+            and start.day == 1 \
+            and end.day == _days_in_month(end.year, end.month):
+        months = []
+        year, month = start.year, start.month
+        while (year, month) <= (end.year, end.month):
+            months.append((year, month))
+            if month == 12:
+                year, month = year + 1, 1
+            else:
+                month += 1
+    else:
+        return _abstain(parsed, start, end, "time",
+                        "cau doanh thu tung thang can ky bao phu dung "
+                        "cac thang day du lien tiep (hoac period_months "
+                        "tu parser), ky hien tai khong chia duoc thanh "
+                        "cac thang nhu vay")
+    revenues = []
+    rows_total = 0
+    other_any = False
+    for year, month in months:
+        month_start, month_end = _month_range(year, month)
+        month_parsed = _copy_parsed(
+            parsed, period_start=month_start, period_end=month_end,
+            period_kind="absolute")
+        value, rows_used, other, _src = _revenue_value(
+            month_parsed, view, lines, orders, rulebook,
+            month_start, month_end, mode)
+        revenues.append(value)
+        rows_total += rows_used
+        other_any = other_any or other
+    confidence, notes = _confidence_for(other_any, [])
+    filter_text = (f"doanh thu tung thang {months} = {revenues}, theo "
+                   "thu tu tu thang cu den thang moi")
+    return _answered(parsed, start, end, "list", revenues, rows_total,
+                     filter_text, None, confidence, [], notes)
 
 
 # ---------------------------------------------------------------------------
@@ -2538,6 +2909,18 @@ def _solve_impl(parsed, view, rulebook, calendar):
                                  start, end, mode, "channel")
     if measure == "quantity_by_unit":
         return _solve_quantity_by_unit(parsed, view, lines, orders,
+                                       rulebook, start, end, mode)
+    if measure == "avg_order_value":
+        return _solve_avg_order_value(parsed, view, lines, orders,
+                                      rulebook, start, end, mode)
+    if measure == "cancelled_order_count":
+        return _solve_cancelled_order_count(parsed, view, lines, orders,
+                                            rulebook, start, end, mode)
+    if measure == "unsold_product_count":
+        return _solve_unsold_product_count(parsed, view, lines, orders,
+                                           rulebook, start, end, mode)
+    if measure == "revenue_by_month":
+        return _solve_revenue_by_month(parsed, view, lines, orders,
                                        rulebook, start, end, mode)
     # Không thể tới đây vì đã chặn measure ngoài COVERED ở trên, nhưng
     # giữ nhánh này để code không bao giờ rơi vào trạng thái không trả

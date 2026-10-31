@@ -160,7 +160,11 @@ except Exception:  # pragma: no cover - dự phòng khi chạy file rời.
 
 
 # ---------------------------------------------------------------------------
-# Enum của hợp đồng (API_CONTRACT mục 2) — không tự thêm giá trị mới.
+# Enum của hợp đồng (API_CONTRACT mục 2) — chỉ thêm giá trị khi solver
+# đã cam kết bao phủ đúng định nghĩa đó (xem COVERED_MEASURES của
+# solver). Bốn measure avg_order_value, cancelled_order_count,
+# unsold_product_count, revenue_by_month được thêm vì solver đã triển
+# khai đúng các định nghĩa này; không tự thêm measure ngoài danh sách đó.
 # ---------------------------------------------------------------------------
 
 MEASURE_VALUES = [
@@ -187,6 +191,10 @@ MEASURE_VALUES = [
     "revenue_by_channel",
     "quantity_by_unit",
     "product_revenue",
+    "avg_order_value",
+    "cancelled_order_count",
+    "unsold_product_count",
+    "revenue_by_month",
     "unknown",
 ]
 PERIOD_KIND_VALUES = ["absolute", "relative", "snapshot", "multi_month", "none"]
@@ -998,7 +1006,8 @@ def build_prompt(question_text, normalized_text, as_of, products, customers, gro
         "revenue_share, growth_percent, growth_amount, top_product, top_customer, top_employee, "
         "best_day, best_month, debt_total, debt_top, import_total, avg_price, price_on_day, "
         "continuous_growth, revenue_by_payment, revenue_by_group, revenue_by_channel, "
-        "quantity_by_unit, product_revenue, unknown.\n"
+        "quantity_by_unit, product_revenue, avg_order_value, cancelled_order_count, "
+        "unsold_product_count, revenue_by_month, unknown.\n"
         "- period_kind chỉ được lấy trong: absolute, relative, snapshot, multi_month, none. "
         "period_start/period_end là chuỗi YYYY-MM-DD hoặc null. Kỳ snapshot (đến hết ngày X) thì "
         "period_start=null, period_end=X. period_months chỉ điền khi period_kind=multi_month, "
@@ -1044,12 +1053,59 @@ def build_prompt(question_text, normalized_text, as_of, products, customers, gro
         "- 'mặt hàng bán chạy nhất' / 'sản phẩm bán chạy nhất' -> measure=top_product, answer_type=string "
         "(k=1), ranking_k=1, ranking_target=product, ranking_metric=quantity (bán chạy tính theo số lượng "
         "quy đổi, không phải theo doanh thu), trừ khi câu nói rõ 'lời/lãi nhất' thì ranking_metric=profit.\n"
+        "- 'trung bình mỗi đơn' / 'bình quân mỗi đơn' / 'giá trị trung bình một đơn' / 'trung bình một đơn "
+        "mang về bao nhiêu doanh thu' -> measure=avg_order_value, answer_type=number, entity_kind=none "
+        "(trừ khi câu có lọc mặt hàng/nhóm thì giữ đúng thực thể đó). Đây là doanh thu bình quân trên một đơn, "
+        "KHÔNG phải tổng doanh thu nên KHÔNG chọn revenue, KHÔNG chọn avg_price.\n"
+        "- 'số đơn bị huỷ' / 'mấy đơn huỷ' / 'đếm số đơn đã huỷ trong kỳ' -> measure=cancelled_order_count, "
+        "answer_type=number, entity_kind=none. Đây là số đơn có trạng thái huỷ trong kỳ, KHÔNG phải tổng số đơn "
+        "nên KHÔNG chọn order_count.\n"
+        "- 'mấy mặt hàng không bán được' / 'mấy món ế' / 'bao nhiêu mặt hàng bán không được cái nào trong kỳ' "
+        "-> measure=unsold_product_count, answer_type=number, entity_kind=none. Đây là số mặt hàng khác nhau "
+        "có doanh số bằng 0 trong kỳ, KHÔNG phải số dòng đơn hay số lượng bán, nên KHÔNG chọn quantity "
+        "hay order_count.\n"
+        "- 'doanh thu N tháng liền nhau kết thúc ở tháng X là bao nhiêu mỗi tháng, từ tháng cũ đến tháng mới' "
+        "-> measure=revenue_by_month, answer_type=list, period_kind=multi_month, period_start=ngày 1 của tháng "
+        "đầu tiên, period_end=ngày cuối của tháng cuối cùng, period_months=list các tháng đó theo thứ tự cũ "
+        "đến mới. Đáp án là một danh sách, mỗi phần tử là doanh thu của một tháng, KHÔNG cộng gộp thành một "
+        "số revenue duy nhất.\n"
         "- 'bán được bao nhiêu tiền' / 'doanh thu' (không xếp hạng, không hỏi ngày/tháng nhất) -> measure=revenue, "
         "answer_type=number. 'số đơn' / 'bao nhiêu đơn' -> order_count. 'bán được bao nhiêu kg/chai/gói' của một "
         "mặt hàng cụ thể -> quantity, unit=đơn vị được hỏi (kg/chai/gói).\n"
         "- 'tỉ lệ' / '%' trong đáp án -> answer_type=percent, measure tương ứng là cancel_rate, revenue_share "
         "hoặc growth_percent, KHÔNG phải revenue. Dấu % trong TÊN sản phẩm (ví dụ tên thuốc có '0,1%') "
         "không làm câu hỏi thành câu percent.\n"
+        "- KỲ TƯƠNG ĐỐI (khóa chặt, tính đúng theo as_of_date, tuần bắt đầu thứ Hai): 'tuần rồi' = thứ Hai đến "
+        "Chủ nhật của tuần trước tuần chứa as_of; 'tuần này' = thứ Hai của tuần chứa as_of đến as_of; "
+        "'7 ngày gần nhất' = 7 ngày tính lùi từ as_of, gồm cả as_of (as_of trừ 6 ngày đến as_of); "
+        "'30 ngày gần nhất' tương tự (as_of trừ 29 ngày đến as_of); 'từ đầu năm đến hết hôm nay' = ngày 1 "
+        "tháng 1 của năm as_of đến as_of; 'từ đầu tháng này đến hết hôm nay' = mùng 1 tháng của as_of đến "
+        "as_of. Khi câu đã xác định được kỳ theo as_of như trên thì dùng period_kind=absolute với "
+        "period_start/period_end cụ thể đó, KHÔNG để period_kind mơ hồ và KHÔNG tự suy ra một kỳ khác.\n"
+        "- TĂNG TRƯỞNG MTD: câu 'từ đầu tháng này đến hết hôm nay so với cùng kỳ tháng trước' / 'hơn kém cùng "
+        "kỳ tháng trước bao nhiêu %' -> measure=growth_percent, answer_type=percent, period_start=mùng 1 "
+        "tháng của as_of, period_end=as_of, period_kind=absolute. KHÔNG dùng cả tháng đầy đủ để so sánh: "
+        "solver sẽ tự so với cùng số ngày đó của tháng trước. Nếu câu hỏi số tiền tăng/giảm thay vì % thì "
+        "dùng growth_amount với cùng kỳ đó.\n"
+        "- TỈ LỆ KHÁCH: câu 'bao nhiêu % khách trong tháng X mua từ N đơn trở lên' thì mẫu số là số khách ĐÃ "
+        "MUA trong tháng X đó, tử số là số khách trong nhóm đó mua từ N đơn trở lên trong cùng tháng X. "
+        "KHÔNG chia cho tổng số khách mọi thời gian, KHÔNG chia cho tổng số đơn. Chỉ chọn một measure khi "
+        "định nghĩa của nó khớp đúng dạng tỉ lệ khách này; KHÔNG được lấy một measure gần giống để lấp chỗ "
+        "trống (ví dụ revenue_share là tỉ lệ doanh thu, không phải tỉ lệ khách). Nếu không có measure nào "
+        "khớp đúng thì dùng measure='unknown' theo quy tắc chống đoán bên dưới.\n"
+        "- 'bao nhiêu tiền' -> answer_type=number, kể cả khi câu nhắc tháng hay ngày (ví dụ 'doanh thu tháng "
+        "5/2026' là number, KHÔNG phải date). Chỉ khi câu hỏi 'ngày nào' / 'tháng nào' thì answer_type mới là date.\n"
+        "- TOP KHÁCH HÀNG: solver sẽ loại khách vãng lai ('Khách lẻ', 'lẻ', 'kl') khỏi xếp hạng, nên LLM "
+        "KHÔNG được chọn khách vãng lai làm thực thể cho câu top khách. Nếu câu top khách không nêu tên khách "
+        "cụ thể thì entity_kind=none, ranking_target=customer.\n"
+        "\n"
+        "QUY TẮC CHỐNG ĐOÁN MEASURE (để câu chưa bao phủ thành abstain thay vì thành sai):\n"
+        "- Nếu không có measure nào trong enum khớp đúng định nghĩa của câu hỏi (ví dụ dạng câu chưa được "
+        "solver bao phủ), thì đặt measure='unknown', ghi rõ vào parse_notes là chưa có measure phù hợp, và "
+        "KHÔNG chọn measure gần nhất để lấp chỗ trống. Quy tắc này KHÔNG làm yếu các measure đã có "
+        "(best_day, price_on_day, revenue, top_product, top_customer, avg_order_value, cancelled_order_count, "
+        "unsold_product_count, revenue_by_month...): khi một measure đã khớp đúng thì vẫn chọn nó với "
+        "confidence bình thường.\n"
         "\n"
         "VÍ DỤ PARSE (chỉ minh họa dạng câu, không phải đáp án, không dùng dữ liệu shop cụ thể):\n"
         "- Câu dạng 'tháng 5/2026 ngày nào cửa hàng bán được nhiều tiền nhất' -> "
@@ -1061,6 +1117,20 @@ def build_prompt(question_text, normalized_text, as_of, products, customers, gro
         "- Câu dạng 'mặt hàng bán chạy nhất tháng 6/2026 là gì' -> "
         "{measure: top_product, answer_type: string, ranking_k: 1, ranking_target: product, "
         "ranking_metric: quantity, period_start: 2026-06-01, period_end: 2026-06-30, period_kind: absolute}.\n"
+        "- Câu dạng 'doanh thu trung bình trên một đơn tháng 5/2025 là bao nhiêu' -> "
+        "{measure: avg_order_value, answer_type: number, entity_kind: none, "
+        "period_start: 2025-05-01, period_end: 2025-05-31, period_kind: absolute}.\n"
+        "- Câu dạng 'tháng 2/2025 cửa hàng có mấy đơn ở trạng thái huỷ' -> "
+        "{measure: cancelled_order_count, answer_type: number, entity_kind: none, "
+        "period_start: 2025-02-01, period_end: 2025-02-28, period_kind: absolute}.\n"
+        "- Câu dạng 'doanh thu 3 tháng liền nhau kết thúc ở tháng 12/2025 là bao nhiêu mỗi tháng, từ tháng cũ "
+        "đến tháng mới' -> "
+        "{measure: revenue_by_month, answer_type: list, period_kind: multi_month, "
+        "period_start: 2025-10-01, period_end: 2025-12-31, period_months: [[2025, 10], [2025, 11], [2025, 12]]}.\n"
+        "- Câu dạng 'từ đầu tháng này đến hết hôm nay, doanh thu tăng hay giảm bao nhiêu % so với cùng kỳ "
+        "tháng trước' -> "
+        "{measure: growth_percent, answer_type: percent, period_kind: absolute, "
+        "period_start: mùng 1 tháng của as_of_date, period_end: as_of_date}.\n"
         "\n"
         "QUY TẮC THỰC THỂ (áp dụng cho price_on_day và mọi câu có mặt hàng cụ thể):\n"
         "- Chọn đúng một thực thể trong danh sách shop, giữ nguyên key/display gốc, KỂ CẢ phần biến thể "

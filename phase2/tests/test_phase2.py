@@ -488,6 +488,319 @@ class TestSolverFilters(unittest.TestCase):
         self.assertEqual(result.entry["answer"], "San pham B")
 
 
+class TestSolverNewMeasures(unittest.TestCase):
+    """Kiểm thử 4 measure mới và loại khách vãng lai khỏi top_customer.
+
+    Các test này dùng dữ liệu giả tự tạo, không dùng đáp án train:
+    chúng chỉ kiểm tra luật tính (bình quân = tổng doanh thu / số đơn
+    phân biệt, đơn huỷ đếm theo mã đơn, mặt hàng ế đếm theo mặt hàng,
+    doanh thu từng tháng trả list theo tháng, khách vãng lai bị loại
+    khỏi xếp hạng). Số liệu trong test là số tự chọn để tính tay được
+    ngay, không phải số đáp án của bất kỳ câu hỏi train nào.
+    """
+
+    def _july_view(self, lines_rows, orders_rows=None, products=None,
+                   customers=None):
+        """Tạo view giả tháng 7/2026 cho các test measure mới."""
+        return _make_view(
+            lines_rows, orders_rows or [],
+            products=products, customers=customers,
+            date_min=datetime.date(2026, 7, 1),
+            date_max=datetime.date(2026, 9, 30))
+
+    def test_avg_order_value_excludes_cancelled_orders(self):
+        """Bình quân mỗi đơn: tổng doanh thu hợp lệ / số đơn hợp lệ phân biệt.
+
+        Doanh thu tháng 7 là 10000 + 20000 = 30000 trên 2 đơn hợp lệ
+        (đơn huỷ 5000 bị loại khỏi cả tử và mẫu), nên bình quân là
+        15000, không phải tổng doanh thu 30000 và không phải 30000/3.
+        """
+        view = self._july_view([
+            _line("O1", datetime.date(2026, 7, 10), "completed",
+                  "SP1", "San pham A", 1, 1, 10000, 10000),
+            _line("O2", datetime.date(2026, 7, 11), "completed",
+                  "SP1", "San pham A", 1, 1, 20000, 20000),
+            _line("O3", datetime.date(2026, 7, 12), "cancelled",
+                  "SP1", "San pham A", 1, 1, 5000, 5000),
+        ])
+        result = solve(
+            _parsed(measure="avg_order_value"), view, None, None)
+        self.assertEqual(result.status, "answered")
+        self.assertEqual(result.entry["type"], "number")
+        self.assertEqual(result.entry["answer"], 15000)
+
+    def test_avg_order_value_rounds_half_up_to_vnd(self):
+        """Bình quân lẻ thì làm tròn về đồng, kiểu nửa lên, như mọi đáp án tiền.
+
+        Tổng 10001 trên 2 đơn = 5000,5 đồng, làm tròn nửa lên thành
+        5001 (không phải 5000 kiểu làm tròn về số chẵn của round()).
+        """
+        view = self._july_view([
+            _line("O1", datetime.date(2026, 7, 10), "completed",
+                  "SP1", "San pham A", 1, 1, 5000, 5000),
+            _line("O2", datetime.date(2026, 7, 11), "completed",
+                  "SP1", "San pham A", 1, 1, 5001, 5001),
+        ])
+        result = solve(
+            _parsed(measure="avg_order_value"), view, None, None)
+        self.assertEqual(result.status, "answered")
+        self.assertEqual(result.entry["answer"], 5001)
+
+    def test_avg_order_value_zero_orders_abstains(self):
+        """Không có đơn hợp lệ nào thì bình quân không xác định, abstain, không trả 0."""
+        view = self._july_view([
+            _line("O3", datetime.date(2026, 7, 12), "cancelled",
+                  "SP1", "San pham A", 1, 1, 5000, 5000),
+        ])
+        result = solve(
+            _parsed(measure="avg_order_value"), view, None, None)
+        self.assertEqual(result.status, "abstain")
+        self.assertEqual(result.error_group, "filter")
+
+    def test_cancelled_order_count_distinct_orders(self):
+        """Đơn huỷ đếm theo mã đơn phân biệt, không đếm dòng và không đếm tổng đơn.
+
+        Đơn O2 huỷ xuất hiện hai lần trong orders (do có hai dòng ghi
+        chép) vẫn chỉ tính 1; cộng O3 huỷ nữa là 2, không phải tổng
+        3 đơn trong kỳ và không phải tỉ lệ phần trăm.
+        """
+        view = self._july_view(
+            [_line("O1", datetime.date(2026, 7, 10), "completed",
+                   "SP1", "San pham A", 1, 1, 10000, 10000)],
+            [_order("O1", datetime.date(2026, 7, 10), "completed",
+                    10000, 10000, 0),
+             _order("O2", datetime.date(2026, 7, 11), "cancelled",
+                    5000, 0, 5000),
+             _order("O2", datetime.date(2026, 7, 11), "cancelled",
+                    5000, 0, 5000),
+             _order("O3", datetime.date(2026, 7, 12), "cancelled",
+                    3000, 0, 3000)])
+        result = solve(
+            _parsed(measure="cancelled_order_count"), view, None, None)
+        self.assertEqual(result.status, "answered")
+        self.assertEqual(result.entry["answer"], 2)
+
+    def test_cancelled_order_count_zero_when_status_recorded(self):
+        """Shop có ghi trạng thái mà trong kỳ không có đơn huỷ thì trả 0 đúng nghĩa."""
+        view = self._july_view(
+            [],
+            [_order("O1", datetime.date(2026, 7, 10), "completed",
+                    10000, 10000, 0)])
+        result = solve(
+            _parsed(measure="cancelled_order_count"), view, None, None)
+        self.assertEqual(result.status, "answered")
+        self.assertEqual(result.entry["answer"], 0)
+
+    def test_cancelled_order_count_no_status_abstains(self):
+        """Shop không có thông tin trạng thái thì không đoán đơn huỷ, abstain column."""
+        view = self._july_view(
+            [_line("O1", datetime.date(2026, 7, 10), "other",
+                   "SP1", "San pham A", 1, 1, 10000, 10000)],
+            [_order("O1", datetime.date(2026, 7, 10), "other",
+                    10000, 10000, 0)])
+        result = solve(
+            _parsed(measure="cancelled_order_count"), view, None, None)
+        self.assertEqual(result.status, "abstain")
+        self.assertEqual(result.error_group, "column")
+
+    def test_unsold_product_count_counts_products_not_lines(self):
+        """Mặt hàng ế đếm theo mặt hàng, không đếm dòng hay đơn.
+
+        Chỉ SP1 có dòng doanh thu trong kỳ, SP2 và SP3 không có dòng
+        nào, nên đáp án là 2 — dù SP1 có thể có nhiều dòng, mỗi mặt
+        hàng ế vẫn chỉ tính 1.
+        """
+        products = [
+            {"key": "SP1", "display": "San pham A",
+             "code": "SP1", "group": None},
+            {"key": "SP2", "display": "San pham B",
+             "code": "SP2", "group": None},
+            {"key": "SP3", "display": "San pham C",
+             "code": "SP3", "group": None},
+        ]
+        view = self._july_view(
+            [_line("O1", datetime.date(2026, 7, 10), "completed",
+                   "SP1", "San pham A", 1, 1, 10000, 10000),
+             _line("O2", datetime.date(2026, 7, 11), "completed",
+                   "SP1", "San pham A", 1, 1, 20000, 20000)],
+            products=products)
+        result = solve(
+            _parsed(measure="unsold_product_count"), view, None, None)
+        self.assertEqual(result.status, "answered")
+        self.assertEqual(result.entry["answer"], 2)
+
+    def test_unsold_product_count_no_product_list_abstains(self):
+        """Không có danh sách sản phẩm thì không biết mặt hàng nào tồn tại để đếm ế."""
+        view = self._july_view([
+            _line("O1", datetime.date(2026, 7, 10), "completed",
+                  "SP1", "San pham A", 1, 1, 10000, 10000),
+        ])
+        result = solve(
+            _parsed(measure="unsold_product_count"), view, None, None)
+        self.assertEqual(result.status, "abstain")
+        self.assertEqual(result.error_group, "column")
+
+    def test_revenue_by_month_full_months_returns_list(self):
+        """Doanh thu từng tháng: list theo tháng cũ đến mới, tháng không bán thì 0.
+
+        Tháng 7 là 10000 + 20000 = 30000, tháng 8 là 50000, tháng 9
+        không có dòng nào nên là 0; đáp án là list [30000, 50000, 0],
+        không phải tổng gộp 80000.
+        """
+        view = self._july_view([
+            _line("O1", datetime.date(2026, 7, 10), "completed",
+                  "SP1", "San pham A", 1, 1, 10000, 10000),
+            _line("O2", datetime.date(2026, 7, 11), "completed",
+                  "SP1", "San pham A", 1, 1, 20000, 20000),
+            _line("O3", datetime.date(2026, 8, 5), "completed",
+                  "SP1", "San pham A", 1, 1, 50000, 50000),
+        ])
+        parsed = _parsed(
+            measure="revenue_by_month",
+            period_start=datetime.date(2026, 7, 1),
+            period_end=datetime.date(2026, 9, 30),
+            answer_type="list")
+        result = solve(parsed, view, None, None)
+        self.assertEqual(result.status, "answered")
+        self.assertEqual(result.entry["type"], "list")
+        self.assertEqual(result.entry["answer"], [30000, 50000, 0])
+
+    def test_revenue_by_month_uses_period_months(self):
+        """Khi parser cho period_months thì dùng đúng danh sách tháng đó, theo thứ tự."""
+        view = self._july_view([
+            _line("O1", datetime.date(2026, 7, 10), "completed",
+                  "SP1", "San pham A", 1, 1, 30000, 30000),
+            _line("O2", datetime.date(2026, 8, 5), "completed",
+                  "SP1", "San pham A", 1, 1, 50000, 50000),
+        ])
+        parsed = _parsed(
+            measure="revenue_by_month",
+            period_months=[(2026, 7), (2026, 8)],
+            answer_type="list")
+        result = solve(parsed, view, None, None)
+        self.assertEqual(result.status, "answered")
+        self.assertEqual(result.entry["answer"], [30000, 50000])
+
+    def test_revenue_by_month_partial_period_abstains(self):
+        """Kỳ cắt giữa tháng thì không chia được thành các tháng đầy đủ, abstain time."""
+        view = self._july_view([
+            _line("O1", datetime.date(2026, 7, 10), "completed",
+                  "SP1", "San pham A", 1, 1, 30000, 30000),
+        ])
+        parsed = _parsed(
+            measure="revenue_by_month",
+            period_start=datetime.date(2026, 7, 15),
+            period_end=datetime.date(2026, 9, 30),
+            answer_type="list")
+        result = solve(parsed, view, None, None)
+        self.assertEqual(result.status, "abstain")
+        self.assertEqual(result.error_group, "time")
+
+    def test_revenue_by_month_non_consecutive_months_abstains(self):
+        """period_months không liên tiếp thì abstain time, không tự lấp tháng thiếu."""
+        view = self._july_view([
+            _line("O1", datetime.date(2026, 7, 10), "completed",
+                  "SP1", "San pham A", 1, 1, 30000, 30000),
+        ])
+        parsed = _parsed(
+            measure="revenue_by_month",
+            period_months=[(2026, 7), (2026, 9)],
+            answer_type="list")
+        result = solve(parsed, view, None, None)
+        self.assertEqual(result.status, "abstain")
+        self.assertEqual(result.error_group, "time")
+
+    def test_top_customer_excludes_walk_in(self):
+        """Top khách loại khách vãng lai dù tổng gộp của chúng lớn nhất.
+
+        Khách vãng lai 90000 (ghi là 'Khach le') phải bị loại, nên top
+        2 là Khach A (50000) rồi Khach B (40000), không phải danh sách
+        bắt đầu bằng khách vãng lai.
+        """
+        customers = [
+            {"key": "KH1", "display": "Khach A",
+             "code": "KH1", "group": None},
+            {"key": "KL", "display": "Khach le",
+             "code": "KL", "group": None},
+            {"key": "KH2", "display": "Khach B",
+             "code": "KH2", "group": None},
+        ]
+        view = self._july_view(
+            [_line("O1", datetime.date(2026, 7, 10), "completed",
+                   "SP1", "San pham A", 1, 1, 90000, 90000,
+                   customer_key="KL", customer_display="Khach le"),
+             _line("O2", datetime.date(2026, 7, 11), "completed",
+                   "SP1", "San pham A", 1, 1, 50000, 50000,
+                   customer_key="KH1", customer_display="Khach A"),
+             _line("O3", datetime.date(2026, 7, 12), "completed",
+                   "SP1", "San pham A", 1, 1, 40000, 40000,
+                   customer_key="KH2", customer_display="Khach B")],
+            customers=customers)
+        parsed = _parsed(
+            measure="top_customer", ranking_k=2,
+            ranking_target="customer", ranking_metric="revenue",
+            answer_type="list")
+        result = solve(parsed, view, None, None)
+        self.assertEqual(result.status, "answered")
+        self.assertEqual(result.entry["answer"], ["Khach A", "Khach B"])
+
+    def test_top_customer_walk_in_variants_excluded(self):
+        """Các biến thể tên khách vãng lai ('le', 'kl') cũng bị loại, không chỉ 'Khach le'."""
+        view = self._july_view(
+            [_line("O1", datetime.date(2026, 7, 10), "completed",
+                   "SP1", "San pham A", 1, 1, 90000, 90000,
+                   customer_key="le", customer_display="le"),
+             _line("O2", datetime.date(2026, 7, 11), "completed",
+                   "SP1", "San pham A", 1, 1, 80000, 80000,
+                   customer_key="kl", customer_display="kl"),
+             _line("O3", datetime.date(2026, 7, 12), "completed",
+                   "SP1", "San pham A", 1, 1, 50000, 50000,
+                   customer_key="KH1", customer_display="Khach A")],
+            customers=[{"key": "KH1", "display": "Khach A",
+                        "code": "KH1", "group": None}])
+        parsed = _parsed(
+            measure="top_customer", ranking_k=1,
+            ranking_target="customer", ranking_metric="revenue",
+            answer_type="string")
+        result = solve(parsed, view, None, None)
+        self.assertEqual(result.status, "answered")
+        self.assertEqual(result.entry["answer"], "Khach A")
+
+    def test_top_customer_real_name_with_le_not_excluded(self):
+        """Tên thật chứa từ 'lẻ' nhưng không khớp đúng dạng vãng lai thì không bị loại.
+
+        'Le Van A' chuẩn hoá thành 'le van a', khác hẳn 'le', nên vẫn
+        được xếp hạng bình thường.
+        """
+        view = self._july_view(
+            [_line("O1", datetime.date(2026, 7, 10), "completed",
+                   "SP1", "San pham A", 1, 1, 50000, 50000,
+                   customer_key="KH3", customer_display="Le Van A")],
+            customers=[{"key": "KH3", "display": "Le Van A",
+                        "code": "KH3", "group": None}])
+        parsed = _parsed(
+            measure="top_customer", ranking_k=1,
+            ranking_target="customer", ranking_metric="revenue",
+            answer_type="string")
+        result = solve(parsed, view, None, None)
+        self.assertEqual(result.status, "answered")
+        self.assertEqual(result.entry["answer"], "Le Van A")
+
+    def test_top_customer_only_walk_in_abstains(self):
+        """Chỉ còn khách vãng lai sau khi loại thì không còn nhóm nào, abstain như cũ."""
+        view = self._july_view(
+            [_line("O1", datetime.date(2026, 7, 10), "completed",
+                   "SP1", "San pham A", 1, 1, 90000, 90000,
+                   customer_key="kl", customer_display="kl")])
+        parsed = _parsed(
+            measure="top_customer", ranking_k=1,
+            ranking_target="customer", ranking_metric="revenue",
+            answer_type="string")
+        result = solve(parsed, view, None, None)
+        self.assertEqual(result.status, "abstain")
+        self.assertEqual(result.error_group, "filter")
+
+
 class TestGateAndFormat(unittest.TestCase):
     """Kiểm thử gate: ngưỡng, format, unanswerable."""
 

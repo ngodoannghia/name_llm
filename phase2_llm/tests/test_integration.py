@@ -51,8 +51,14 @@ import run_phase2_llm as runner  # noqa: E402
 #: SHA sau khi thêm dòng đó. SHA gốc trước khi thêm dòng (để đối chiếu
 #: lịch sử): solver 05b1d10423ad79461c1ec40e7ebb6b7eeba73ab477f8b5f6383241e1da7e6829,
 #: shop_view 1b35aff88baf1118c97e8f890187a6f7ab352fc7563fc862089bba799191279a.
+#: CẬP NHẬT NGÀY 2026-10-31 (tuning solver, theo yêu cầu của coordinator):
+#: solver.py được sửa CÓ CHỦ ĐÍCH để thêm 4 measure mới
+#: (avg_order_value, cancelled_order_count, unsold_product_count,
+#: revenue_by_month) và loại khách vãng lai khỏi top_customer; shop_view.py
+#: KHÔNG sửa nên hash của nó giữ nguyên. SHA solver trước đợt tuning này
+#: (để đối chiếu lịch sử): 1b04d9bbf9c759aa60fec4118b872942a6ff6397473e340623436445f64212e2.
 EXPECTED_SOLVER_SHA256 = (
-    "1b04d9bbf9c759aa60fec4118b872942a6ff6397473e340623436445f64212e2"
+    "9b58d6aa48ffdf35e170cf8f8259fb7ba7e25a10a5d831a11f71aedf8d0fecc1"
 )
 EXPECTED_SHOP_VIEW_SHA256 = (
     "9e991d28ed2130d817b6995a3fdb768ace67dd4467b4522a3209c8343e1509a1"
