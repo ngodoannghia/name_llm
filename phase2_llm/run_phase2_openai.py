@@ -76,7 +76,7 @@ sys.path.insert(0, str(_PHASE2_LLM_DIR))
 
 from llm_parser import parse_with_llm  # noqa: E402
 from openai_backend import OpenAIResponsesBackend  # noqa: E402
-from run_phase2_llm import run_phase2_llm  # noqa: E402
+from run_phase2_llm import _parse_with_template_fallback, run_phase2_llm  # noqa: E402
 
 
 def _short(text, max_len=120):
@@ -190,6 +190,115 @@ class LoggingBackend:
             f"[LLM OK #{call_no}] API tra ve sau {elapsed_ms:.0f}ms, "
             f"JSON co {len(result)} keys: {_short(sorted(result.keys()), 200)}")
         return result
+
+
+def parse_with_llm_first(question_text, as_of, calendar, rulebook,
+                         products, customers, backend, logger=None,
+                         llm_parse_fn=None, template_fallback_fn=None):
+    """Parse một câu hỏi theo thứ tự BẮT BUỘC: LLM trước, lỗi thì fallback template.
+
+    Thứ tự này là cam kết của runner, không phải hành vi ngẫu nhiên:
+      1. LLM TRƯỚC: gọi ``llm_parse_fn`` (mặc định là
+         ``llm_parser.parse_with_llm`` với backend OpenAI) trước tiên.
+         Parser template KHÔNG được gọi ở bước này, dù template có thể
+         parse được câu hỏi — vì nếu gọi template trước rồi mới gọi LLM,
+         hoặc gọi cả hai rồi chọn template, thì kết quả sẽ không còn là
+         kết quả LLM nữa và log ``parse_sources`` sẽ nói dối.
+         Bên trong ``llm_parser`` đã có repair tối đa 2 lần cho JSON sai
+         schema: LLM được sửa tối đa 2 lần trước khi bị coi là lỗi.
+      2. LLM LỖI -> TEMPLATE: chỉ khi ``llm_parse_fn`` raise bất kỳ lỗi
+         nào (lỗi API, lỗi mạng, lỗi dựng prompt, lỗi không ngờ), hoặc
+         trả về kết quả không dùng được (None hoặc không có ``parsed``),
+         thì mới gọi parser template một lần duy nhất, với lý do lỗi LLM
+         ghi rõ vào notes. Đây là lớp fallback NGOÀI, khác với lớp
+         fallback BÊN TRONG ``llm_parser`` (khi backend/validate lỗi,
+         ``llm_parser`` tự trả ``template_fallback`` mà không raise) —
+         lớp ngoài này chỉ chạy khi ``llm_parse_fn`` tự nó raise ra ngoài,
+         tức là trường hợp mà trước đây chỉ có ``solve_one_question``
+         mới bắt được một cách gián tiếp.
+      3. TEMPLATE CŨNG LỖI -> KHÔNG CRASH SHOP: nếu parser template cũng
+         raise, hàm này log lỗi rồi raise lại nguyên vẹn, để tầng
+         ``solve_one_question`` chuyển câu đó thành abstain (theo hợp
+         đồng cũ: một câu lỗi không giết cả shop), chứ không tự bịa đáp án.
+
+    Đặc biệt lưu ý để tránh gọi template thừa:
+      - LLM thành công (source llm/repair, có parsed) -> trả ngay, KHÔNG
+        gọi template thêm lần nào.
+      - LLM đã tự fallback bên trong (trả template_fallback) -> trả ngay,
+        KHÔNG gọi template lần thứ hai, vì gọi lại chỉ tốn thời gian và
+        làm notes bị trùng, không đổi kết quả.
+
+    Đầu vào:
+        question_text/as_of/calendar/rulebook/products/customers: giống
+            chữ ký mà ``solve_one_question`` mong đợi ở parse_fn.
+        backend: backend OpenAI đã bọc log (LoggingBackend).
+        logger: ConsoleLogger hoặc None (None thì không log, chỉ trả kết quả).
+        llm_parse_fn: hàm LLM để tiêm trong test (mặc định parse_with_llm).
+        template_fallback_fn: hàm template để tiêm trong test (mặc định
+            ``run_phase2_llm._parse_with_template_fallback``).
+
+    Đầu ra:
+        Kết quả parse (ParseResult) để ``solve_one_question`` dùng tiếp.
+
+    Raise:
+        Chỉ raise khi cả LLM lẫn template đều lỗi (trường hợp 3 ở trên).
+    """
+    llm_parse_fn = llm_parse_fn if llm_parse_fn is not None else parse_with_llm
+    template_fallback_fn = (
+        template_fallback_fn
+        if template_fallback_fn is not None
+        else _parse_with_template_fallback
+    )
+    # Bước 1: LLM trước, template chưa được gọi ở đây.
+    try:
+        result = llm_parse_fn(
+            question_text, as_of, calendar, rulebook,
+            products, customers, backend=backend,
+        )
+    except Exception as exc:  # noqa: BLE001 - LLM loi bat ky cung fallback
+        if logger is not None:
+            logger.log(
+                f"[PARSE ERROR] LLM loi, chuyen sang parser template: {exc!r}",
+                important=True)
+        # Bước 2: LLM lỗi -> template một lần duy nhất.
+        try:
+            return template_fallback_fn(
+                question_text, as_of, calendar, rulebook, products, customers,
+                reason=f"llm_parser loi, fallback ve template: {exc!r}",
+            )
+        except Exception:
+            # Bước 3: template cũng lỗi -> log rồi raise lại để tầng trên
+            # chuyển thành abstain, không bịa đáp án, không crash shop.
+            if logger is not None:
+                logger.log(
+                    "[TEMPLATE ERROR] Parser template cung loi, cau nay se "
+                    "abstain o tang solver/gate.",
+                    important=True)
+            raise
+    # LLM đã trả về: kiểm tra kết quả có dùng được không trước khi quyết.
+    parsed = getattr(result, "parsed", None)
+    if result is None or parsed is None:
+        if logger is not None:
+            logger.log(
+                "[PARSE ERROR] LLM tra ket qua khong dung duoc "
+                "(None hoac khong co parsed), chuyen sang parser template.",
+                important=True)
+        try:
+            return template_fallback_fn(
+                question_text, as_of, calendar, rulebook, products, customers,
+                reason="llm_parser tra ket qua khong dung duoc, "
+                "fallback ve template",
+            )
+        except Exception:
+            if logger is not None:
+                logger.log(
+                    "[TEMPLATE ERROR] Parser template cung loi, cau nay se "
+                    "abstain o tang solver/gate.",
+                    important=True)
+            raise
+    # LLM thành công, hoặc đã tự fallback bên trong: trả ngay, KHÔNG gọi
+    # template thêm lần nào nữa.
+    return result
 
 
 def parse_args(argv=None):
@@ -310,13 +419,14 @@ def main(argv=None):
         question_counter = {"n": 0}
 
         # Hàm parse tiêm vào pipeline: giữ nguyên chữ ký mà solve_one_question
-        # mong đợi, chỉ thêm backend OpenAI (đã bọc log) và log kết quả
-        # parse kèm notes — notes là nơi llm_parser ghi lý do fallback.
+        # mong đợi, nhưng thứ tự bên trong là LLM trước, lỗi thì template
+        # (xem parse_with_llm_first), và log kết quả parse kèm notes —
+        # notes là nơi llm_parser ghi lý do fallback.
         def parse_fn(question_text, as_of, calendar, rulebook, products, customers):
             parse_started = time.perf_counter()
-            result = parse_with_llm(
+            result = parse_with_llm_first(
                 question_text, as_of, calendar, rulebook,
-                products, customers, backend=backend,
+                products, customers, backend=backend, logger=logger,
             )
             parse_ms = (time.perf_counter() - parse_started) * 1000
             parsed = getattr(result, "parsed", None)
