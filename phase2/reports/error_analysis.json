@@ -1,0 +1,993 @@
+{
+  "error_groups": {
+    "parser": {
+      "count": 791,
+      "examples": [
+        {
+          "id": "q_1703b4f93db8",
+          "business_id": "biz_101",
+          "measure": "unknown"
+        },
+        {
+          "id": "q_7c8afb8a81e9",
+          "business_id": "biz_101",
+          "measure": "unknown"
+        },
+        {
+          "id": "q_879535b41a21",
+          "business_id": "biz_101",
+          "measure": "unknown"
+        }
+      ]
+    },
+    "uncovered": {
+      "count": 92,
+      "examples": [
+        {
+          "id": "q_234fec44d93d",
+          "business_id": "biz_102",
+          "measure": "avg_price"
+        },
+        {
+          "id": "q_28e3195fcbb9",
+          "business_id": "biz_102",
+          "measure": "avg_price"
+        },
+        {
+          "id": "q_23ab8cf108d1",
+          "business_id": "biz_103",
+          "measure": "avg_price"
+        }
+      ]
+    },
+    "filter": {
+      "count": 106,
+      "examples": [
+        {
+          "id": "q_16f9cc98ab35",
+          "business_id": "biz_103",
+          "measure": "growth_percent"
+        },
+        {
+          "id": "q_66380f9d73b9",
+          "business_id": "biz_103",
+          "measure": "growth_percent"
+        },
+        {
+          "id": "q_b27e7f53b569",
+          "business_id": "biz_103",
+          "measure": "growth_percent"
+        }
+      ]
+    },
+    "time": {
+      "count": 56,
+      "examples": [
+        {
+          "id": "q_2b36065a8adc",
+          "business_id": "biz_103",
+          "measure": "growth_percent"
+        },
+        {
+          "id": "q_3cbc76c5b4a8",
+          "business_id": "biz_103",
+          "measure": "growth_percent"
+        },
+        {
+          "id": "q_4bf0ba4d3872",
+          "business_id": "biz_103",
+          "measure": "growth_percent"
+        }
+      ]
+    },
+    "unanswerable": {
+      "count": 16,
+      "examples": [
+        {
+          "id": "q_46e6ca519588",
+          "business_id": "biz_103",
+          "measure": "revenue"
+        },
+        {
+          "id": "q_5e75fcb3f8ce",
+          "business_id": "biz_103",
+          "measure": "unknown"
+        },
+        {
+          "id": "q_cfea850ecaa2",
+          "business_id": "biz_103",
+          "measure": "top_product"
+        }
+      ]
+    },
+    "entity": {
+      "count": 87,
+      "examples": [
+        {
+          "id": "q_75d48f1bfc6d",
+          "business_id": "biz_103",
+          "measure": "revenue_share"
+        },
+        {
+          "id": "q_9f82b2f25fd6",
+          "business_id": "biz_103",
+          "measure": "revenue_share"
+        },
+        {
+          "id": "q_6c1ca5ce7bd4",
+          "business_id": "biz_105",
+          "measure": "revenue_by_payment"
+        }
+      ]
+    },
+    "column": {
+      "count": 41,
+      "examples": [
+        {
+          "id": "q_41c360c34398",
+          "business_id": "biz_104",
+          "measure": "quantity_by_unit"
+        },
+        {
+          "id": "q_4bfce7dd9238",
+          "business_id": "biz_104",
+          "measure": "quantity_by_unit"
+        },
+        {
+          "id": "q_a01143657c29",
+          "business_id": "biz_104",
+          "measure": "quantity_by_unit"
+        }
+      ]
+    },
+    "format": {
+      "count": 28,
+      "examples": [
+        {
+          "id": "q_c881d843a8fb",
+          "business_id": "biz_104",
+          "measure": "quantity_by_unit"
+        },
+        {
+          "id": "q_02ed16421456",
+          "business_id": "biz_105",
+          "measure": "quantity_by_unit"
+        },
+        {
+          "id": "q_25e68617a9f7",
+          "business_id": "biz_106",
+          "measure": "quantity_by_unit"
+        }
+      ]
+    },
+    "unit": {
+      "count": 1,
+      "examples": [
+        {
+          "id": "q_ffcb6868973c",
+          "business_id": "biz_121",
+          "measure": "quantity"
+        }
+      ]
+    }
+  },
+  "wrong_by_measure": {
+    "revenue": {
+      "count": 616,
+      "examples": [
+        {
+          "id": "q_5049522ff12c",
+          "business_id": "biz_101"
+        },
+        {
+          "id": "q_1a70054e2f85",
+          "business_id": "biz_102"
+        },
+        {
+          "id": "q_20d5aeb823b2",
+          "business_id": "biz_102"
+        }
+      ]
+    },
+    "top_customer": {
+      "count": 69,
+      "examples": [
+        {
+          "id": "q_13db1a0a7ea9",
+          "business_id": "biz_102"
+        },
+        {
+          "id": "q_151d139d77ca",
+          "business_id": "biz_102"
+        },
+        {
+          "id": "q_20229203ac89",
+          "business_id": "biz_102"
+        }
+      ]
+    },
+    "order_count": {
+      "count": 208,
+      "examples": [
+        {
+          "id": "q_1bd200cd8993",
+          "business_id": "biz_102"
+        },
+        {
+          "id": "q_3a520aec0ca1",
+          "business_id": "biz_102"
+        },
+        {
+          "id": "q_3be73af1a105",
+          "business_id": "biz_102"
+        }
+      ]
+    },
+    "growth_percent": {
+      "count": 125,
+      "examples": [
+        {
+          "id": "q_5029b166aa34",
+          "business_id": "biz_102"
+        },
+        {
+          "id": "q_b276ba56b8b1",
+          "business_id": "biz_102"
+        },
+        {
+          "id": "q_63501211fe59",
+          "business_id": "biz_103"
+        }
+      ]
+    },
+    "best_month": {
+      "count": 12,
+      "examples": [
+        {
+          "id": "q_0a0038f69d4e",
+          "business_id": "biz_103"
+        },
+        {
+          "id": "q_9045737fcddf",
+          "business_id": "biz_103"
+        },
+        {
+          "id": "q_81d6b5a181f4",
+          "business_id": "biz_106"
+        }
+      ]
+    },
+    "best_day": {
+      "count": 24,
+      "examples": [
+        {
+          "id": "q_56ec0e6fa497",
+          "business_id": "biz_104"
+        },
+        {
+          "id": "q_e2d23212a893",
+          "business_id": "biz_104"
+        },
+        {
+          "id": "q_e658a5d9646a",
+          "business_id": "biz_104"
+        }
+      ]
+    },
+    "top_product": {
+      "count": 16,
+      "examples": [
+        {
+          "id": "q_019ec94d9799",
+          "business_id": "biz_106"
+        },
+        {
+          "id": "q_4192ef63e140",
+          "business_id": "biz_106"
+        },
+        {
+          "id": "q_bfa382e47ca0",
+          "business_id": "biz_106"
+        }
+      ]
+    },
+    "debt_total": {
+      "count": 79,
+      "examples": [
+        {
+          "id": "q_073aee886aef",
+          "business_id": "biz_106"
+        },
+        {
+          "id": "q_1f99d93acad3",
+          "business_id": "biz_106"
+        },
+        {
+          "id": "q_23cea7790c35",
+          "business_id": "biz_106"
+        }
+      ]
+    },
+    "debt_top": {
+      "count": 15,
+      "examples": [
+        {
+          "id": "q_153f4e995558",
+          "business_id": "biz_106"
+        },
+        {
+          "id": "q_3a2bccc332db",
+          "business_id": "biz_106"
+        },
+        {
+          "id": "q_420556897d22",
+          "business_id": "biz_106"
+        }
+      ]
+    },
+    "revenue_share": {
+      "count": 28,
+      "examples": [
+        {
+          "id": "q_8710e092dd39",
+          "business_id": "biz_108"
+        },
+        {
+          "id": "q_1c41ad190bbd",
+          "business_id": "biz_111"
+        },
+        {
+          "id": "q_3692d7766dba",
+          "business_id": "biz_111"
+        }
+      ]
+    },
+    "revenue_by_group": {
+      "count": 5,
+      "examples": [
+        {
+          "id": "q_bc83ba885777",
+          "business_id": "biz_108"
+        },
+        {
+          "id": "q_6b5bc4607001",
+          "business_id": "biz_118"
+        },
+        {
+          "id": "q_ed3ef76aa90c",
+          "business_id": "biz_118"
+        }
+      ]
+    },
+    "quantity": {
+      "count": 7,
+      "examples": [
+        {
+          "id": "q_0a8ec3050fe7",
+          "business_id": "biz_109"
+        },
+        {
+          "id": "q_16029963548e",
+          "business_id": "biz_112"
+        },
+        {
+          "id": "q_462895903b95",
+          "business_id": "biz_112"
+        }
+      ]
+    },
+    "continuous_growth": {
+      "count": 2,
+      "examples": [
+        {
+          "id": "q_313dfc683558",
+          "business_id": "biz_109"
+        },
+        {
+          "id": "q_6d6f14c7978d",
+          "business_id": "biz_118"
+        }
+      ]
+    },
+    "cancel_rate": {
+      "count": 10,
+      "examples": [
+        {
+          "id": "q_0f4e7cdb3ce5",
+          "business_id": "biz_112"
+        },
+        {
+          "id": "q_f276ab43b4cc",
+          "business_id": "biz_116"
+        },
+        {
+          "id": "q_06ea706b571c",
+          "business_id": "biz_122"
+        }
+      ]
+    },
+    "growth_amount": {
+      "count": 1,
+      "examples": [
+        {
+          "id": "q_d4b5c60c1305",
+          "business_id": "biz_122"
+        }
+      ]
+    }
+  },
+  "wrong_by_business": {
+    "biz_101": {
+      "count": 1,
+      "examples": [
+        {
+          "id": "q_5049522ff12c"
+        }
+      ]
+    },
+    "biz_102": {
+      "count": 38,
+      "examples": [
+        {
+          "id": "q_13db1a0a7ea9"
+        },
+        {
+          "id": "q_151d139d77ca"
+        },
+        {
+          "id": "q_1a70054e2f85"
+        }
+      ]
+    },
+    "biz_103": {
+      "count": 33,
+      "examples": [
+        {
+          "id": "q_02a28b3629be"
+        },
+        {
+          "id": "q_0483a8398dfe"
+        },
+        {
+          "id": "q_0a0038f69d4e"
+        }
+      ]
+    },
+    "biz_104": {
+      "count": 47,
+      "examples": [
+        {
+          "id": "q_00eadfc5c599"
+        },
+        {
+          "id": "q_0166f82c0223"
+        },
+        {
+          "id": "q_042171000b2c"
+        }
+      ]
+    },
+    "biz_105": {
+      "count": 53,
+      "examples": [
+        {
+          "id": "q_06e8d7da339d"
+        },
+        {
+          "id": "q_114c372f1eef"
+        },
+        {
+          "id": "q_1367a63a409f"
+        }
+      ]
+    },
+    "biz_106": {
+      "count": 53,
+      "examples": [
+        {
+          "id": "q_019ec94d9799"
+        },
+        {
+          "id": "q_073aee886aef"
+        },
+        {
+          "id": "q_0a6d039818f6"
+        }
+      ]
+    },
+    "biz_107": {
+      "count": 14,
+      "examples": [
+        {
+          "id": "q_13ff20df10e5"
+        },
+        {
+          "id": "q_18833548c734"
+        },
+        {
+          "id": "q_30d639b40362"
+        }
+      ]
+    },
+    "biz_108": {
+      "count": 53,
+      "examples": [
+        {
+          "id": "q_0beba71e5fd7"
+        },
+        {
+          "id": "q_0c750e093169"
+        },
+        {
+          "id": "q_13fc08e94004"
+        }
+      ]
+    },
+    "biz_109": {
+      "count": 54,
+      "examples": [
+        {
+          "id": "q_00e9f0bed567"
+        },
+        {
+          "id": "q_082e5f45ee37"
+        },
+        {
+          "id": "q_0a8ec3050fe7"
+        }
+      ]
+    },
+    "biz_110": {
+      "count": 26,
+      "examples": [
+        {
+          "id": "q_0504f61cae69"
+        },
+        {
+          "id": "q_078fecc248e5"
+        },
+        {
+          "id": "q_0add21504f80"
+        }
+      ]
+    },
+    "biz_111": {
+      "count": 62,
+      "examples": [
+        {
+          "id": "q_0194d8d10f17"
+        },
+        {
+          "id": "q_0279f675859e"
+        },
+        {
+          "id": "q_116e55aef197"
+        }
+      ]
+    },
+    "biz_112": {
+      "count": 36,
+      "examples": [
+        {
+          "id": "q_006c26c65d50"
+        },
+        {
+          "id": "q_052517924e03"
+        },
+        {
+          "id": "q_0f4e7cdb3ce5"
+        }
+      ]
+    },
+    "biz_113": {
+      "count": 14,
+      "examples": [
+        {
+          "id": "q_20c6e10447cf"
+        },
+        {
+          "id": "q_21ddf8b64394"
+        },
+        {
+          "id": "q_6be56589f795"
+        }
+      ]
+    },
+    "biz_114": {
+      "count": 16,
+      "examples": [
+        {
+          "id": "q_083211e2c80c"
+        },
+        {
+          "id": "q_15fc10ffaea0"
+        },
+        {
+          "id": "q_3848d4161b32"
+        }
+      ]
+    },
+    "biz_115": {
+      "count": 34,
+      "examples": [
+        {
+          "id": "q_040ffbb6869a"
+        },
+        {
+          "id": "q_06389f3583c9"
+        },
+        {
+          "id": "q_08f6d5ef7cce"
+        }
+      ]
+    },
+    "biz_116": {
+      "count": 44,
+      "examples": [
+        {
+          "id": "q_03d662023a15"
+        },
+        {
+          "id": "q_0fe7c0c36f42"
+        },
+        {
+          "id": "q_1295f18bd2fe"
+        }
+      ]
+    },
+    "biz_117": {
+      "count": 41,
+      "examples": [
+        {
+          "id": "q_01b914589609"
+        },
+        {
+          "id": "q_0f7a713a9a4e"
+        },
+        {
+          "id": "q_16001b7edc7b"
+        }
+      ]
+    },
+    "biz_118": {
+      "count": 48,
+      "examples": [
+        {
+          "id": "q_03766ac30505"
+        },
+        {
+          "id": "q_09581d4bcf0b"
+        },
+        {
+          "id": "q_12a9fedc1368"
+        }
+      ]
+    },
+    "biz_119": {
+      "count": 42,
+      "examples": [
+        {
+          "id": "q_06adbccf5be5"
+        },
+        {
+          "id": "q_095e5097bfb5"
+        },
+        {
+          "id": "q_0a626a4c76d0"
+        }
+      ]
+    },
+    "biz_120": {
+      "count": 36,
+      "examples": [
+        {
+          "id": "q_046b75d6192e"
+        },
+        {
+          "id": "q_0d3d69f04d88"
+        },
+        {
+          "id": "q_1c4309a2b495"
+        }
+      ]
+    },
+    "biz_121": {
+      "count": 53,
+      "examples": [
+        {
+          "id": "q_00bb4edee433"
+        },
+        {
+          "id": "q_0d1d7ead3e7e"
+        },
+        {
+          "id": "q_10e64d599cf5"
+        }
+      ]
+    },
+    "biz_122": {
+      "count": 50,
+      "examples": [
+        {
+          "id": "q_05b478fbe670"
+        },
+        {
+          "id": "q_06ea706b571c"
+        },
+        {
+          "id": "q_0b6552ce1b0d"
+        }
+      ]
+    },
+    "biz_123": {
+      "count": 57,
+      "examples": [
+        {
+          "id": "q_08c12a0fd506"
+        },
+        {
+          "id": "q_09ac426d8fa6"
+        },
+        {
+          "id": "q_0a14fc442eee"
+        }
+      ]
+    },
+    "biz_124": {
+      "count": 61,
+      "examples": [
+        {
+          "id": "q_0183529f9d61"
+        },
+        {
+          "id": "q_026fa17395ed"
+        },
+        {
+          "id": "q_02b5f208ee57"
+        }
+      ]
+    },
+    "biz_125": {
+      "count": 15,
+      "examples": [
+        {
+          "id": "q_02eb42db6665"
+        },
+        {
+          "id": "q_3919f65b83aa"
+        },
+        {
+          "id": "q_45faa9ab6915"
+        }
+      ]
+    },
+    "biz_126": {
+      "count": 6,
+      "examples": [
+        {
+          "id": "q_233670084b6f"
+        },
+        {
+          "id": "q_402e8b63355b"
+        },
+        {
+          "id": "q_5268e64fb415"
+        }
+      ]
+    },
+    "biz_127": {
+      "count": 51,
+      "examples": [
+        {
+          "id": "q_0285dfd1bb28"
+        },
+        {
+          "id": "q_046b262bd6a7"
+        },
+        {
+          "id": "q_06340b45abc6"
+        }
+      ]
+    },
+    "biz_128": {
+      "count": 54,
+      "examples": [
+        {
+          "id": "q_01a47607f90c"
+        },
+        {
+          "id": "q_04293d2ed907"
+        },
+        {
+          "id": "q_049799837470"
+        }
+      ]
+    },
+    "biz_129": {
+      "count": 58,
+      "examples": [
+        {
+          "id": "q_072e9d4f9c8e"
+        },
+        {
+          "id": "q_07f86ff2d62b"
+        },
+        {
+          "id": "q_0eebfe5b43c4"
+        }
+      ]
+    },
+    "biz_130": {
+      "count": 67,
+      "examples": [
+        {
+          "id": "q_01bba93199de"
+        },
+        {
+          "id": "q_057830855dd5"
+        },
+        {
+          "id": "q_058bd677f168"
+        }
+      ]
+    }
+  },
+  "verdict_counts": {
+    "abstain": 1202,
+    "correct": 581,
+    "wrong": 1217
+  },
+  "shop_errors": {},
+  "shop_timings": {
+    "biz_101": {
+      "seconds": 3.982,
+      "questions": 40,
+      "cache_hit": true
+    },
+    "biz_102": {
+      "seconds": 19.121,
+      "questions": 119,
+      "cache_hit": true
+    },
+    "biz_103": {
+      "seconds": 9.742,
+      "questions": 119,
+      "cache_hit": true
+    },
+    "biz_104": {
+      "seconds": 40.649,
+      "questions": 119,
+      "cache_hit": true
+    },
+    "biz_105": {
+      "seconds": 17.759,
+      "questions": 119,
+      "cache_hit": true
+    },
+    "biz_106": {
+      "seconds": 195.253,
+      "questions": 119,
+      "cache_hit": false
+    },
+    "biz_107": {
+      "seconds": 4.429,
+      "questions": 40,
+      "cache_hit": true
+    },
+    "biz_108": {
+      "seconds": 74.431,
+      "questions": 119,
+      "cache_hit": false
+    },
+    "biz_109": {
+      "seconds": 106.773,
+      "questions": 118,
+      "cache_hit": false
+    },
+    "biz_110": {
+      "seconds": 1.922,
+      "questions": 40,
+      "cache_hit": true
+    },
+    "biz_111": {
+      "seconds": 23.916,
+      "questions": 118,
+      "cache_hit": true
+    },
+    "biz_112": {
+      "seconds": 15.047,
+      "questions": 118,
+      "cache_hit": true
+    },
+    "biz_113": {
+      "seconds": 2.053,
+      "questions": 40,
+      "cache_hit": true
+    },
+    "biz_114": {
+      "seconds": 1.27,
+      "questions": 40,
+      "cache_hit": false
+    },
+    "biz_115": {
+      "seconds": 6.26,
+      "questions": 118,
+      "cache_hit": true
+    },
+    "biz_116": {
+      "seconds": 9.694,
+      "questions": 118,
+      "cache_hit": true
+    },
+    "biz_117": {
+      "seconds": 24.91,
+      "questions": 118,
+      "cache_hit": false
+    },
+    "biz_118": {
+      "seconds": 9.823,
+      "questions": 118,
+      "cache_hit": true
+    },
+    "biz_119": {
+      "seconds": 76.869,
+      "questions": 118,
+      "cache_hit": false
+    },
+    "biz_120": {
+      "seconds": 98.646,
+      "questions": 118,
+      "cache_hit": false
+    },
+    "biz_121": {
+      "seconds": 26.847,
+      "questions": 118,
+      "cache_hit": true
+    },
+    "biz_122": {
+      "seconds": 30.81,
+      "questions": 118,
+      "cache_hit": true
+    },
+    "biz_123": {
+      "seconds": 13.725,
+      "questions": 118,
+      "cache_hit": true
+    },
+    "biz_124": {
+      "seconds": 51.16,
+      "questions": 118,
+      "cache_hit": true
+    },
+    "biz_125": {
+      "seconds": 1.922,
+      "questions": 40,
+      "cache_hit": false
+    },
+    "biz_126": {
+      "seconds": 4.26,
+      "questions": 40,
+      "cache_hit": true
+    },
+    "biz_127": {
+      "seconds": 18.662,
+      "questions": 118,
+      "cache_hit": true
+    },
+    "biz_128": {
+      "seconds": 84.964,
+      "questions": 118,
+      "cache_hit": false
+    },
+    "biz_129": {
+      "seconds": 46.045,
+      "questions": 118,
+      "cache_hit": false
+    },
+    "biz_130": {
+      "seconds": 95.163,
+      "questions": 118,
+      "cache_hit": true
+    }
+  }
+}

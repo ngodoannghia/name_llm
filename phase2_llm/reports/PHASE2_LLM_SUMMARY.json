@@ -1,0 +1,128 @@
+{
+  "backend": "llm_parser",
+  "backend_note": "Module llm_parser da duoc nap; nguon parse thuc te xem parse_sources (neu khong co backend model duoc cau hinh, llm_parser tu fallback ve template theo thiet ke cua no).",
+  "total_questions": 20,
+  "written": 20,
+  "cache": {
+    "hit": 0,
+    "miss": 1
+  },
+  "shop_timings": {
+    "biz_101": {
+      "seconds": 6.285,
+      "questions": 20,
+      "cache_hit": false
+    }
+  },
+  "shop_errors": {},
+  "run_seconds": 6.285,
+  "status_counts": {
+    "answered": 16,
+    "abstain": 4
+  },
+  "parse_sources": {
+    "template_fallback": 20
+  },
+  "coverage": {
+    "answered": 16,
+    "abstain": 4,
+    "unanswerable_predicted": 0,
+    "answered_rate": 0.8,
+    "abstain_rate": 0.2,
+    "unanswerable_rate": 0.0
+  },
+  "score": {
+    "total": 3000,
+    "correct": 15,
+    "wrong": 1,
+    "abstain": 2984,
+    "pa": 0.004666666666666667,
+    "per_type": {
+      "number": {
+        "total": 1884,
+        "correct": 11,
+        "wrong": 1,
+        "abstain": 1872,
+        "pa": 0.005307855626326964
+      },
+      "percent": {
+        "total": 578,
+        "correct": 0,
+        "wrong": 0,
+        "abstain": 578,
+        "pa": 0.0
+      },
+      "string": {
+        "total": 88,
+        "correct": 1,
+        "wrong": 0,
+        "abstain": 87,
+        "pa": 0.011363636363636364
+      },
+      "list": {
+        "total": 193,
+        "correct": 0,
+        "wrong": 0,
+        "abstain": 193,
+        "pa": 0.0
+      },
+      "unanswerable": {
+        "total": 70,
+        "correct": 0,
+        "wrong": 0,
+        "abstain": 70,
+        "pa": 0.0
+      },
+      "date": {
+        "total": 145,
+        "correct": 3,
+        "wrong": 0,
+        "abstain": 142,
+        "pa": 0.020689655172413793
+      },
+      "table": {
+        "total": 19,
+        "correct": 0,
+        "wrong": 0,
+        "abstain": 19,
+        "pa": 0.0
+      },
+      "boolean": {
+        "total": 23,
+        "correct": 0,
+        "wrong": 0,
+        "abstain": 23,
+        "pa": 0.0
+      }
+    },
+    "per_business": {
+      "unknown": {
+        "total": 2980,
+        "correct": 0,
+        "wrong": 0,
+        "abstain": 2980,
+        "pa": 0.0
+      },
+      "biz_101": {
+        "total": 20,
+        "correct": 15,
+        "wrong": 1,
+        "abstain": 4,
+        "pa": 0.7
+      }
+    },
+    "holdout_pa": null
+  },
+  "holdout": {
+    "total": 0,
+    "correct": 0,
+    "wrong": 0,
+    "pa": null
+  },
+  "non_holdout": {
+    "total": 3000,
+    "correct": 15,
+    "wrong": 1,
+    "pa": 0.004666666666666667
+  }
+}

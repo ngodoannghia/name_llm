@@ -1,0 +1,1544 @@
+{
+  "shops_requested": [
+    "biz_101",
+    "biz_102",
+    "biz_103",
+    "biz_104",
+    "biz_105",
+    "biz_106",
+    "biz_107",
+    "biz_108",
+    "biz_109",
+    "biz_110",
+    "biz_111",
+    "biz_112",
+    "biz_113",
+    "biz_114",
+    "biz_115",
+    "biz_116",
+    "biz_117",
+    "biz_118",
+    "biz_119",
+    "biz_120",
+    "biz_121",
+    "biz_122",
+    "biz_123",
+    "biz_124",
+    "biz_125",
+    "biz_126",
+    "biz_127",
+    "biz_128",
+    "biz_129",
+    "biz_130"
+  ],
+  "shops_total": 30,
+  "shops_ok": 30,
+  "shops_error": [],
+  "per_shop": [
+    {
+      "business_id": "biz_101",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "ban_hang"
+      ],
+      "rows_in": 56501,
+      "rows_out": 56501,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 10,
+      "new_mapped_count": 10,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 1,
+      "sources": {
+        "ban_hang": "rule_fallback"
+      },
+      "table_roles": {
+        "ban_hang": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'ban_hang': Khong co backend LLM (backend=None), fallback rule-based."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 0.72
+    },
+    {
+      "business_id": "biz_102",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "DanhSachQuyDoi",
+        "DonHang_ChiTiet"
+      ],
+      "rows_in": 86106,
+      "rows_out": 86106,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 12,
+      "new_mapped_count": 12,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 2,
+      "sources": {
+        "DanhSachQuyDoi": "rule_fallback",
+        "DonHang_ChiTiet": "rule_fallback"
+      },
+      "table_roles": {
+        "DanhSachQuyDoi": "other",
+        "DonHang_ChiTiet": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'DanhSachQuyDoi': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DonHang_ChiTiet': Khong co backend LLM (backend=None), fallback rule-based."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 15.82
+    },
+    {
+      "business_id": "biz_103",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "DanhSachQuyDoi",
+        "DonHang_ChiTiet"
+      ],
+      "rows_in": 45611,
+      "rows_out": 45611,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 12,
+      "new_mapped_count": 12,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 2,
+      "sources": {
+        "DanhSachQuyDoi": "rule_fallback",
+        "DonHang_ChiTiet": "rule_fallback"
+      },
+      "table_roles": {
+        "DanhSachQuyDoi": "other",
+        "DonHang_ChiTiet": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'DanhSachQuyDoi': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DonHang_ChiTiet': Khong co backend LLM (backend=None), fallback rule-based."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 6.29
+    },
+    {
+      "business_id": "biz_104",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "DanhSachQuyDoi",
+        "DonHang_ChiTiet"
+      ],
+      "rows_in": 62896,
+      "rows_out": 62896,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 12,
+      "new_mapped_count": 12,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 2,
+      "sources": {
+        "DanhSachQuyDoi": "rule_fallback",
+        "DonHang_ChiTiet": "rule_fallback"
+      },
+      "table_roles": {
+        "DanhSachQuyDoi": "other",
+        "DonHang_ChiTiet": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'DanhSachQuyDoi': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DonHang_ChiTiet': Khong co backend LLM (backend=None), fallback rule-based."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 11.13
+    },
+    {
+      "business_id": "biz_105",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "BangGia",
+        "DanhMuc",
+        "SoBanHang",
+        "SoNhapHang",
+        "TonKho"
+      ],
+      "rows_in": 141748,
+      "rows_out": 139526,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 16,
+      "new_mapped_count": 16,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 5,
+      "sources": {
+        "BangGia": "rule_fallback",
+        "DanhMuc": "rule_fallback",
+        "SoBanHang": "rule_fallback",
+        "SoNhapHang": "rule_fallback",
+        "TonKho": "rule_fallback"
+      },
+      "table_roles": {
+        "BangGia": "other",
+        "DanhMuc": "other",
+        "SoBanHang": "other",
+        "SoNhapHang": "other",
+        "TonKho": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'BangGia': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhMuc': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'SoBanHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'SoNhapHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'TonKho': Khong co backend LLM (backend=None), fallback rule-based.",
+        "Đã khử 2222 dòng trùng (mã đơn + toàn bộ dòng) theo luật lỗi xuất file.",
+        "Bảng 'SoBanHang': 96 dòng không tra được hệ số quy đổi nên '_qty_base' để trống ở các dòng đó (không gán 0)."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 26.77
+    },
+    {
+      "business_id": "biz_106",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "BaoCaoTonKho",
+        "DanhSachChiTietNhapHang",
+        "DanhSachDonViTinh",
+        "DanhSachHoaDon",
+        "DanhSachHoaDonChiTiet",
+        "DanhSachKhachHang",
+        "DanhSachNhapHang",
+        "DanhSachSanPham",
+        "SoQuy"
+      ],
+      "rows_in": 289353,
+      "rows_out": 286123,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 20,
+      "new_mapped_count": 20,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 9,
+      "sources": {
+        "BaoCaoTonKho": "rule_fallback",
+        "DanhSachChiTietNhapHang": "rule_fallback",
+        "DanhSachDonViTinh": "rule_fallback",
+        "DanhSachHoaDon": "rule_fallback",
+        "DanhSachHoaDonChiTiet": "rule_fallback",
+        "DanhSachKhachHang": "rule_fallback",
+        "DanhSachNhapHang": "rule_fallback",
+        "DanhSachSanPham": "rule_fallback",
+        "SoQuy": "rule_fallback"
+      },
+      "table_roles": {
+        "BaoCaoTonKho": "other",
+        "DanhSachChiTietNhapHang": "other",
+        "DanhSachDonViTinh": "other",
+        "DanhSachHoaDon": "other",
+        "DanhSachHoaDonChiTiet": "other",
+        "DanhSachKhachHang": "other",
+        "DanhSachNhapHang": "other",
+        "DanhSachSanPham": "other",
+        "SoQuy": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'BaoCaoTonKho': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachChiTietNhapHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachDonViTinh': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachHoaDon': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachHoaDonChiTiet': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachKhachHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachNhapHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachSanPham': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'SoQuy': Khong co backend LLM (backend=None), fallback rule-based.",
+        "Đã khử 3230 dòng trùng (mã đơn + toàn bộ dòng) theo luật lỗi xuất file.",
+        "Bảng 'DanhSachChiTietNhapHang': không tìm được bảng quy đổi hay cột quy đổi sẵn nên giữ nguyên số lượng gốc, chưa thêm '_qty_base'."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 46.55
+    },
+    {
+      "business_id": "biz_107",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "SoBanHang"
+      ],
+      "rows_in": 43605,
+      "rows_out": 43605,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 8,
+      "new_mapped_count": 8,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 1,
+      "sources": {
+        "SoBanHang": "rule_fallback"
+      },
+      "table_roles": {
+        "SoBanHang": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'SoBanHang': Khong co backend LLM (backend=None), fallback rule-based."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 5.74
+    },
+    {
+      "business_id": "biz_108",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "BaoCaoTonKho",
+        "DanhSachChiTietNhapHang",
+        "DanhSachHoaDon",
+        "DanhSachHoaDonChiTiet",
+        "DanhSachKhachHang",
+        "DanhSachNhapHang",
+        "DanhSachSanPham"
+      ],
+      "rows_in": 113696,
+      "rows_out": 113696,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 21,
+      "new_mapped_count": 21,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 7,
+      "sources": {
+        "BaoCaoTonKho": "rule_fallback",
+        "DanhSachChiTietNhapHang": "rule_fallback",
+        "DanhSachHoaDon": "rule_fallback",
+        "DanhSachHoaDonChiTiet": "rule_fallback",
+        "DanhSachKhachHang": "rule_fallback",
+        "DanhSachNhapHang": "rule_fallback",
+        "DanhSachSanPham": "rule_fallback"
+      },
+      "table_roles": {
+        "BaoCaoTonKho": "other",
+        "DanhSachChiTietNhapHang": "other",
+        "DanhSachHoaDon": "other",
+        "DanhSachHoaDonChiTiet": "other",
+        "DanhSachKhachHang": "other",
+        "DanhSachNhapHang": "other",
+        "DanhSachSanPham": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "README dai hon 4000 ky tu, chi lay 4000 ky tu dau theo contract.",
+        "llm_ingest: Bang 'BaoCaoTonKho': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachChiTietNhapHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachHoaDon': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachHoaDonChiTiet': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachKhachHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachNhapHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachSanPham': Khong co backend LLM (backend=None), fallback rule-based.",
+        "Bảng 'DanhSachChiTietNhapHang': không tìm được bảng quy đổi hay cột quy đổi sẵn nên giữ nguyên số lượng gốc, chưa thêm '_qty_base'."
+      ],
+      "readme_found": true,
+      "readme_truncated": true,
+      "elapsed_seconds": 20.0
+    },
+    {
+      "business_id": "biz_109",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "DanhSachHoaDonChiTiet",
+        "DuLieuBanHang",
+        "DuLieuBanHang #2",
+        "DuLieuBanHang #3",
+        "DuLieuBanHang #4",
+        "DuLieuBanHang #5",
+        "DuLieuBanHang #6",
+        "DuLieuBanHang #7",
+        "DuLieuBanHang #8"
+      ],
+      "rows_in": 156626,
+      "rows_out": 156626,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 22,
+      "new_mapped_count": 22,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 9,
+      "sources": {
+        "DanhSachHoaDonChiTiet": "rule_fallback",
+        "DuLieuBanHang": "rule_fallback",
+        "DuLieuBanHang #2": "rule_fallback",
+        "DuLieuBanHang #3": "rule_fallback",
+        "DuLieuBanHang #4": "rule_fallback",
+        "DuLieuBanHang #5": "rule_fallback",
+        "DuLieuBanHang #6": "rule_fallback",
+        "DuLieuBanHang #7": "rule_fallback",
+        "DuLieuBanHang #8": "rule_fallback"
+      },
+      "table_roles": {
+        "DanhSachHoaDonChiTiet": "other",
+        "DuLieuBanHang": "other",
+        "DuLieuBanHang #2": "other",
+        "DuLieuBanHang #3": "other",
+        "DuLieuBanHang #4": "other",
+        "DuLieuBanHang #5": "other",
+        "DuLieuBanHang #6": "other",
+        "DuLieuBanHang #7": "other",
+        "DuLieuBanHang #8": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'DanhSachHoaDonChiTiet': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DuLieuBanHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DuLieuBanHang #2': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DuLieuBanHang #3': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DuLieuBanHang #4': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DuLieuBanHang #5': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DuLieuBanHang #6': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DuLieuBanHang #7': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DuLieuBanHang #8': Khong co backend LLM (backend=None), fallback rule-based.",
+        "Bảng 'DuLieuBanHang #6': không tìm được bảng quy đổi hay cột quy đổi sẵn nên giữ nguyên số lượng gốc, chưa thêm '_qty_base'."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 25.79
+    },
+    {
+      "business_id": "biz_110",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "danh_sach_hoa_don"
+      ],
+      "rows_in": 29317,
+      "rows_out": 29317,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 8,
+      "new_mapped_count": 8,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 1,
+      "sources": {
+        "danh_sach_hoa_don": "rule_fallback"
+      },
+      "table_roles": {
+        "danh_sach_hoa_don": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'danh_sach_hoa_don': Khong co backend LLM (backend=None), fallback rule-based."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 0.27
+    },
+    {
+      "business_id": "biz_111",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "chi_tiet_don",
+        "don_hang",
+        "khach_hang",
+        "san_pham",
+        "thanh_toan"
+      ],
+      "rows_in": 239499,
+      "rows_out": 239499,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 16,
+      "new_mapped_count": 16,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 5,
+      "sources": {
+        "chi_tiet_don": "rule_fallback",
+        "don_hang": "rule_fallback",
+        "khach_hang": "rule_fallback",
+        "san_pham": "rule_fallback",
+        "thanh_toan": "rule_fallback"
+      },
+      "table_roles": {
+        "chi_tiet_don": "other",
+        "don_hang": "other",
+        "khach_hang": "other",
+        "san_pham": "other",
+        "thanh_toan": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'chi_tiet_don': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'don_hang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'khach_hang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'san_pham': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'thanh_toan': Khong co backend LLM (backend=None), fallback rule-based."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 2.07
+    },
+    {
+      "business_id": "biz_112",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "Danh sách hàng hóa",
+        "So_chi_tiet_ban_hang"
+      ],
+      "rows_in": 113375,
+      "rows_out": 113375,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 12,
+      "new_mapped_count": 12,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 2,
+      "sources": {
+        "Danh sách hàng hóa": "rule_fallback",
+        "So_chi_tiet_ban_hang": "rule_fallback"
+      },
+      "table_roles": {
+        "Danh sách hàng hóa": "other",
+        "So_chi_tiet_ban_hang": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'Danh sách hàng hóa': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'So_chi_tiet_ban_hang': Khong co backend LLM (backend=None), fallback rule-based."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 16.94
+    },
+    {
+      "business_id": "biz_113",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "SoBanHang"
+      ],
+      "rows_in": 32994,
+      "rows_out": 32994,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 6,
+      "new_mapped_count": 6,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 1,
+      "sources": {
+        "SoBanHang": "rule_fallback"
+      },
+      "table_roles": {
+        "SoBanHang": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'SoBanHang': Khong co backend LLM (backend=None), fallback rule-based."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 4.17
+    },
+    {
+      "business_id": "biz_114",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "ban_hang"
+      ],
+      "rows_in": 26119,
+      "rows_out": 26119,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 7,
+      "new_mapped_count": 7,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 1,
+      "sources": {
+        "ban_hang": "rule_fallback"
+      },
+      "table_roles": {
+        "ban_hang": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'ban_hang': Khong co backend LLM (backend=None), fallback rule-based."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 0.17
+    },
+    {
+      "business_id": "biz_115",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "Bảng kê phiếu giao hàng",
+        "Chi tiết công nợ theo hạn",
+        "Danh sách hàng hóa",
+        "So_chi_tiet_ban_hang"
+      ],
+      "rows_in": 55962,
+      "rows_out": 55962,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 14,
+      "new_mapped_count": 14,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 4,
+      "sources": {
+        "Bảng kê phiếu giao hàng": "rule_fallback",
+        "Chi tiết công nợ theo hạn": "rule_fallback",
+        "Danh sách hàng hóa": "rule_fallback",
+        "So_chi_tiet_ban_hang": "rule_fallback"
+      },
+      "table_roles": {
+        "Bảng kê phiếu giao hàng": "other",
+        "Chi tiết công nợ theo hạn": "other",
+        "Danh sách hàng hóa": "other",
+        "So_chi_tiet_ban_hang": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'Bảng kê phiếu giao hàng': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'Chi tiết công nợ theo hạn': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'Danh sách hàng hóa': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'So_chi_tiet_ban_hang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "Bảng 'Bảng kê phiếu giao hàng': không tìm được bảng quy đổi hay cột quy đổi sẵn nên giữ nguyên số lượng gốc, chưa thêm '_qty_base'."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 8.5
+    },
+    {
+      "business_id": "biz_116",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "Bao_cao_ban_hang",
+        "Bao_cao_ban_hang #2",
+        "Bao_cao_ban_hang #3",
+        "Bao_cao_ban_hang #4"
+      ],
+      "rows_in": 79117,
+      "rows_out": 79117,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 14,
+      "new_mapped_count": 14,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 4,
+      "sources": {
+        "Bao_cao_ban_hang": "rule_fallback",
+        "Bao_cao_ban_hang #2": "rule_fallback",
+        "Bao_cao_ban_hang #3": "rule_fallback",
+        "Bao_cao_ban_hang #4": "rule_fallback"
+      },
+      "table_roles": {
+        "Bao_cao_ban_hang": "other",
+        "Bao_cao_ban_hang #2": "other",
+        "Bao_cao_ban_hang #3": "other",
+        "Bao_cao_ban_hang #4": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'Bao_cao_ban_hang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'Bao_cao_ban_hang #2': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'Bao_cao_ban_hang #3': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'Bao_cao_ban_hang #4': Khong co backend LLM (backend=None), fallback rule-based.",
+        "Bảng 'Bao_cao_ban_hang #3': không tìm được bảng quy đổi hay cột quy đổi sẵn nên giữ nguyên số lượng gốc, chưa thêm '_qty_base'."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 11.8
+    },
+    {
+      "business_id": "biz_117",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "BangGia",
+        "DanhMuc",
+        "SoBanHang",
+        "SoGiaoHang",
+        "SoHanNo",
+        "SoNhapHang",
+        "TonKho"
+      ],
+      "rows_in": 66286,
+      "rows_out": 65791,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 12,
+      "new_mapped_count": 12,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 7,
+      "sources": {
+        "BangGia": "rule_fallback",
+        "DanhMuc": "rule_fallback",
+        "SoBanHang": "rule_fallback",
+        "SoGiaoHang": "rule_fallback",
+        "SoHanNo": "rule_fallback",
+        "SoNhapHang": "rule_fallback",
+        "TonKho": "rule_fallback"
+      },
+      "table_roles": {
+        "BangGia": "other",
+        "DanhMuc": "other",
+        "SoBanHang": "other",
+        "SoGiaoHang": "other",
+        "SoHanNo": "other",
+        "SoNhapHang": "other",
+        "TonKho": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'BangGia': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhMuc': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'SoBanHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'SoGiaoHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'SoHanNo': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'SoNhapHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'TonKho': Khong co backend LLM (backend=None), fallback rule-based.",
+        "Đã khử 495 dòng trùng (mã đơn + toàn bộ dòng) theo luật lỗi xuất file."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 10.22
+    },
+    {
+      "business_id": "biz_118",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "Bảng kê phiếu giao hàng",
+        "Chi tiết công nợ theo hạn",
+        "Danh sách hàng hóa",
+        "So_chi_tiet_ban_hang"
+      ],
+      "rows_in": 92169,
+      "rows_out": 92169,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 13,
+      "new_mapped_count": 13,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 4,
+      "sources": {
+        "Bảng kê phiếu giao hàng": "rule_fallback",
+        "Chi tiết công nợ theo hạn": "rule_fallback",
+        "Danh sách hàng hóa": "rule_fallback",
+        "So_chi_tiet_ban_hang": "rule_fallback"
+      },
+      "table_roles": {
+        "Bảng kê phiếu giao hàng": "other",
+        "Chi tiết công nợ theo hạn": "other",
+        "Danh sách hàng hóa": "other",
+        "So_chi_tiet_ban_hang": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'Bảng kê phiếu giao hàng': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'Chi tiết công nợ theo hạn': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'Danh sách hàng hóa': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'So_chi_tiet_ban_hang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "Bảng 'Bảng kê phiếu giao hàng': không tìm được bảng quy đổi hay cột quy đổi sẵn nên giữ nguyên số lượng gốc, chưa thêm '_qty_base'."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 13.89
+    },
+    {
+      "business_id": "biz_119",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "BaoCaoTonKho",
+        "DanhSachChiTietNhapHang",
+        "DanhSachHoaDon",
+        "DanhSachHoaDonChiTiet",
+        "DanhSachHoaDonChiTietLo",
+        "DanhSachKhachHang",
+        "DanhSachLoHang",
+        "DanhSachNhapHang",
+        "DanhSachSanPham",
+        "DanhSachThuoc"
+      ],
+      "rows_in": 172569,
+      "rows_out": 170661,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 18,
+      "new_mapped_count": 18,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 10,
+      "sources": {
+        "BaoCaoTonKho": "rule_fallback",
+        "DanhSachChiTietNhapHang": "rule_fallback",
+        "DanhSachHoaDon": "rule_fallback",
+        "DanhSachHoaDonChiTiet": "rule_fallback",
+        "DanhSachHoaDonChiTietLo": "rule_fallback",
+        "DanhSachKhachHang": "rule_fallback",
+        "DanhSachLoHang": "rule_fallback",
+        "DanhSachNhapHang": "rule_fallback",
+        "DanhSachSanPham": "rule_fallback",
+        "DanhSachThuoc": "rule_fallback"
+      },
+      "table_roles": {
+        "BaoCaoTonKho": "other",
+        "DanhSachChiTietNhapHang": "other",
+        "DanhSachHoaDon": "other",
+        "DanhSachHoaDonChiTiet": "other",
+        "DanhSachHoaDonChiTietLo": "other",
+        "DanhSachKhachHang": "other",
+        "DanhSachLoHang": "other",
+        "DanhSachNhapHang": "other",
+        "DanhSachSanPham": "other",
+        "DanhSachThuoc": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "README dai hon 4000 ky tu, chi lay 4000 ky tu dau theo contract.",
+        "llm_ingest: Bang 'BaoCaoTonKho': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachChiTietNhapHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachHoaDon': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachHoaDonChiTiet': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachHoaDonChiTietLo': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachKhachHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachLoHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachNhapHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachSanPham': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachThuoc': Khong co backend LLM (backend=None), fallback rule-based.",
+        "Đã khử 1908 dòng trùng (mã đơn + toàn bộ dòng) theo luật lỗi xuất file.",
+        "Bảng 'DanhSachChiTietNhapHang': không tìm được bảng quy đổi hay cột quy đổi sẵn nên giữ nguyên số lượng gốc, chưa thêm '_qty_base'.",
+        "Bảng 'DanhSachLoHang': không tìm được bảng quy đổi hay cột quy đổi sẵn nên giữ nguyên số lượng gốc, chưa thêm '_qty_base'."
+      ],
+      "readme_found": true,
+      "readme_truncated": true,
+      "elapsed_seconds": 21.15
+    },
+    {
+      "business_id": "biz_120",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "BaoCaoTonKho",
+        "DanhSachChiTietNhapHang",
+        "DanhSachHoaDon",
+        "DanhSachHoaDonChiTiet",
+        "DanhSachHoaDonChiTietLo",
+        "DanhSachKhachHang",
+        "DanhSachLoHang",
+        "DanhSachNhapHang",
+        "DanhSachSanPham",
+        "DanhSachThuoc"
+      ],
+      "rows_in": 240702,
+      "rows_out": 240702,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 19,
+      "new_mapped_count": 19,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 10,
+      "sources": {
+        "BaoCaoTonKho": "rule_fallback",
+        "DanhSachChiTietNhapHang": "rule_fallback",
+        "DanhSachHoaDon": "rule_fallback",
+        "DanhSachHoaDonChiTiet": "rule_fallback",
+        "DanhSachHoaDonChiTietLo": "rule_fallback",
+        "DanhSachKhachHang": "rule_fallback",
+        "DanhSachLoHang": "rule_fallback",
+        "DanhSachNhapHang": "rule_fallback",
+        "DanhSachSanPham": "rule_fallback",
+        "DanhSachThuoc": "rule_fallback"
+      },
+      "table_roles": {
+        "BaoCaoTonKho": "other",
+        "DanhSachChiTietNhapHang": "other",
+        "DanhSachHoaDon": "other",
+        "DanhSachHoaDonChiTiet": "other",
+        "DanhSachHoaDonChiTietLo": "other",
+        "DanhSachKhachHang": "other",
+        "DanhSachLoHang": "other",
+        "DanhSachNhapHang": "other",
+        "DanhSachSanPham": "other",
+        "DanhSachThuoc": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "README dai hon 4000 ky tu, chi lay 4000 ky tu dau theo contract.",
+        "llm_ingest: Bang 'BaoCaoTonKho': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachChiTietNhapHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachHoaDon': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachHoaDonChiTiet': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachHoaDonChiTietLo': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachKhachHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachLoHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachNhapHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachSanPham': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachThuoc': Khong co backend LLM (backend=None), fallback rule-based.",
+        "Bảng 'DanhSachChiTietNhapHang': không tìm được bảng quy đổi hay cột quy đổi sẵn nên giữ nguyên số lượng gốc, chưa thêm '_qty_base'.",
+        "Bảng 'DanhSachLoHang': không tìm được bảng quy đổi hay cột quy đổi sẵn nên giữ nguyên số lượng gốc, chưa thêm '_qty_base'."
+      ],
+      "readme_found": true,
+      "readme_truncated": true,
+      "elapsed_seconds": 28.87
+    },
+    {
+      "business_id": "biz_121",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "DonHang_ChiTiet",
+        "DuLieuXuat",
+        "DuLieuXuat #2",
+        "DuLieuXuat #3",
+        "DuLieuXuat #4",
+        "DuLieuXuat #5",
+        "DuLieuXuat #6"
+      ],
+      "rows_in": 172139,
+      "rows_out": 172139,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 19,
+      "new_mapped_count": 19,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 7,
+      "sources": {
+        "DonHang_ChiTiet": "rule_fallback",
+        "DuLieuXuat": "rule_fallback",
+        "DuLieuXuat #2": "rule_fallback",
+        "DuLieuXuat #3": "rule_fallback",
+        "DuLieuXuat #4": "rule_fallback",
+        "DuLieuXuat #5": "rule_fallback",
+        "DuLieuXuat #6": "rule_fallback"
+      },
+      "table_roles": {
+        "DonHang_ChiTiet": "other",
+        "DuLieuXuat": "other",
+        "DuLieuXuat #2": "other",
+        "DuLieuXuat #3": "other",
+        "DuLieuXuat #4": "other",
+        "DuLieuXuat #5": "other",
+        "DuLieuXuat #6": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'DonHang_ChiTiet': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DuLieuXuat': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DuLieuXuat #2': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DuLieuXuat #3': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DuLieuXuat #4': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DuLieuXuat #5': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DuLieuXuat #6': Khong co backend LLM (backend=None), fallback rule-based."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 18.42
+    },
+    {
+      "business_id": "biz_122",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "DanhSachQuyDoi",
+        "DanhSachSanPham",
+        "DanhSachThuoc",
+        "DonHang_ChiTiet",
+        "DonHang_Lo",
+        "DonNhapHang",
+        "DonNhapHang_ChiTiet"
+      ],
+      "rows_in": 214306,
+      "rows_out": 214306,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 19,
+      "new_mapped_count": 19,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 7,
+      "sources": {
+        "DanhSachQuyDoi": "rule_fallback",
+        "DanhSachSanPham": "rule_fallback",
+        "DanhSachThuoc": "rule_fallback",
+        "DonHang_ChiTiet": "rule_fallback",
+        "DonHang_Lo": "rule_fallback",
+        "DonNhapHang": "rule_fallback",
+        "DonNhapHang_ChiTiet": "rule_fallback"
+      },
+      "table_roles": {
+        "DanhSachQuyDoi": "other",
+        "DanhSachSanPham": "other",
+        "DanhSachThuoc": "other",
+        "DonHang_ChiTiet": "other",
+        "DonHang_Lo": "other",
+        "DonNhapHang": "other",
+        "DonNhapHang_ChiTiet": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'DanhSachQuyDoi': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachSanPham': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachThuoc': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DonHang_ChiTiet': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DonHang_Lo': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DonNhapHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DonNhapHang_ChiTiet': Khong co backend LLM (backend=None), fallback rule-based."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 21.57
+    },
+    {
+      "business_id": "biz_123",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "chi_nhanh",
+        "chi_tiet_don",
+        "chi_tiet_don_lo",
+        "chi_tiet_nhap",
+        "don_hang",
+        "don_vi_sp",
+        "khach_hang",
+        "lich_su_gia",
+        "lo_hang",
+        "nha_cung_cap",
+        "nhan_vien",
+        "phieu_nhap",
+        "san_pham",
+        "thanh_toan",
+        "the_kho",
+        "thong_tin_thuoc",
+        "tra_hang"
+      ],
+      "rows_in": 268911,
+      "rows_out": 267703,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 35,
+      "new_mapped_count": 35,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 17,
+      "sources": {
+        "chi_nhanh": "rule_fallback",
+        "chi_tiet_don": "rule_fallback",
+        "chi_tiet_don_lo": "rule_fallback",
+        "chi_tiet_nhap": "rule_fallback",
+        "don_hang": "rule_fallback",
+        "don_vi_sp": "rule_fallback",
+        "khach_hang": "rule_fallback",
+        "lich_su_gia": "rule_fallback",
+        "lo_hang": "rule_fallback",
+        "nha_cung_cap": "rule_fallback",
+        "nhan_vien": "rule_fallback",
+        "phieu_nhap": "rule_fallback",
+        "san_pham": "rule_fallback",
+        "thanh_toan": "rule_fallback",
+        "the_kho": "rule_fallback",
+        "thong_tin_thuoc": "rule_fallback",
+        "tra_hang": "rule_fallback"
+      },
+      "table_roles": {
+        "chi_nhanh": "other",
+        "chi_tiet_don": "other",
+        "chi_tiet_don_lo": "other",
+        "chi_tiet_nhap": "other",
+        "don_hang": "other",
+        "don_vi_sp": "other",
+        "khach_hang": "other",
+        "lich_su_gia": "other",
+        "lo_hang": "other",
+        "nha_cung_cap": "other",
+        "nhan_vien": "other",
+        "phieu_nhap": "other",
+        "san_pham": "other",
+        "thanh_toan": "other",
+        "the_kho": "other",
+        "thong_tin_thuoc": "other",
+        "tra_hang": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'chi_nhanh': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'chi_tiet_don': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'chi_tiet_don_lo': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'chi_tiet_nhap': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'don_hang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'don_vi_sp': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'khach_hang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'lich_su_gia': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'lo_hang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'nha_cung_cap': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'nhan_vien': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'phieu_nhap': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'san_pham': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'thanh_toan': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'the_kho': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'thong_tin_thuoc': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'tra_hang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "Đã khử 1208 dòng trùng (mã đơn + toàn bộ dòng) theo luật lỗi xuất file."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 1.79
+    },
+    {
+      "business_id": "biz_124",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "BanHang_BanTheoLo",
+        "BanHang_ChiTietHoaDon",
+        "BanHang_DonViQuyDoi",
+        "BanHang_HangHoa",
+        "BanHang_HoaDon",
+        "BanHang_KhachHang",
+        "BanHang_LichSuGia",
+        "BanHang_LoHang",
+        "BanHang_PhieuThu",
+        "BanHang_Thuoc",
+        "SoTay_ChiPhi",
+        "SoTay_NhapHang",
+        "ton_kho"
+      ],
+      "rows_in": 305973,
+      "rows_out": 304785,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 24,
+      "new_mapped_count": 24,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 13,
+      "sources": {
+        "BanHang_BanTheoLo": "rule_fallback",
+        "BanHang_ChiTietHoaDon": "rule_fallback",
+        "BanHang_DonViQuyDoi": "rule_fallback",
+        "BanHang_HangHoa": "rule_fallback",
+        "BanHang_HoaDon": "rule_fallback",
+        "BanHang_KhachHang": "rule_fallback",
+        "BanHang_LichSuGia": "rule_fallback",
+        "BanHang_LoHang": "rule_fallback",
+        "BanHang_PhieuThu": "rule_fallback",
+        "BanHang_Thuoc": "rule_fallback",
+        "SoTay_ChiPhi": "rule_fallback",
+        "SoTay_NhapHang": "rule_fallback",
+        "ton_kho": "rule_fallback"
+      },
+      "table_roles": {
+        "BanHang_BanTheoLo": "other",
+        "BanHang_ChiTietHoaDon": "other",
+        "BanHang_DonViQuyDoi": "other",
+        "BanHang_HangHoa": "other",
+        "BanHang_HoaDon": "other",
+        "BanHang_KhachHang": "other",
+        "BanHang_LichSuGia": "other",
+        "BanHang_LoHang": "other",
+        "BanHang_PhieuThu": "other",
+        "BanHang_Thuoc": "other",
+        "SoTay_ChiPhi": "other",
+        "SoTay_NhapHang": "other",
+        "ton_kho": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'BanHang_BanTheoLo': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'BanHang_ChiTietHoaDon': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'BanHang_DonViQuyDoi': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'BanHang_HangHoa': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'BanHang_HoaDon': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'BanHang_KhachHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'BanHang_LichSuGia': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'BanHang_LoHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'BanHang_PhieuThu': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'BanHang_Thuoc': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'SoTay_ChiPhi': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'SoTay_NhapHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'ton_kho': Khong co backend LLM (backend=None), fallback rule-based.",
+        "Đã khử 1188 dòng trùng (mã đơn + toàn bộ dòng) theo luật lỗi xuất file."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 43.22
+    },
+    {
+      "business_id": "biz_125",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "ban_hang"
+      ],
+      "rows_in": 79052,
+      "rows_out": 79052,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 6,
+      "new_mapped_count": 6,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 1,
+      "sources": {
+        "ban_hang": "rule_fallback"
+      },
+      "table_roles": {
+        "ban_hang": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'ban_hang': Khong co backend LLM (backend=None), fallback rule-based."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 0.64
+    },
+    {
+      "business_id": "biz_126",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "SoBanHang"
+      ],
+      "rows_in": 66429,
+      "rows_out": 66429,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 7,
+      "new_mapped_count": 7,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 1,
+      "sources": {
+        "SoBanHang": "rule_fallback"
+      },
+      "table_roles": {
+        "SoBanHang": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'SoBanHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "Bảng 'SoBanHang': không tìm được bảng quy đổi hay cột quy đổi sẵn nên giữ nguyên số lượng gốc, chưa thêm '_qty_base'."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 8.67
+    },
+    {
+      "business_id": "biz_127",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "chi_tiet_don",
+        "don_hang",
+        "khach_hang",
+        "san_pham",
+        "thanh_toan"
+      ],
+      "rows_in": 198800,
+      "rows_out": 195901,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 18,
+      "new_mapped_count": 18,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 5,
+      "sources": {
+        "chi_tiet_don": "rule_fallback",
+        "don_hang": "rule_fallback",
+        "khach_hang": "rule_fallback",
+        "san_pham": "rule_fallback",
+        "thanh_toan": "rule_fallback"
+      },
+      "table_roles": {
+        "chi_tiet_don": "other",
+        "don_hang": "other",
+        "khach_hang": "other",
+        "san_pham": "other",
+        "thanh_toan": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'chi_tiet_don': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'don_hang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'khach_hang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'san_pham': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'thanh_toan': Khong co backend LLM (backend=None), fallback rule-based.",
+        "Đã khử 2899 dòng trùng (mã đơn + toàn bộ dòng) theo luật lỗi xuất file."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 1.82
+    },
+    {
+      "business_id": "biz_128",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "BaoCaoTonKho",
+        "DanhSachChiTietNhapHang",
+        "DanhSachHoaDon",
+        "DanhSachHoaDonChiTiet",
+        "DanhSachHoaDonPhongBan",
+        "DanhSachKhachHang",
+        "DanhSachNhapHang",
+        "DanhSachSanPham"
+      ],
+      "rows_in": 152259,
+      "rows_out": 151116,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 18,
+      "new_mapped_count": 18,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 8,
+      "sources": {
+        "BaoCaoTonKho": "rule_fallback",
+        "DanhSachChiTietNhapHang": "rule_fallback",
+        "DanhSachHoaDon": "rule_fallback",
+        "DanhSachHoaDonChiTiet": "rule_fallback",
+        "DanhSachHoaDonPhongBan": "rule_fallback",
+        "DanhSachKhachHang": "rule_fallback",
+        "DanhSachNhapHang": "rule_fallback",
+        "DanhSachSanPham": "rule_fallback"
+      },
+      "table_roles": {
+        "BaoCaoTonKho": "other",
+        "DanhSachChiTietNhapHang": "other",
+        "DanhSachHoaDon": "other",
+        "DanhSachHoaDonChiTiet": "other",
+        "DanhSachHoaDonPhongBan": "other",
+        "DanhSachKhachHang": "other",
+        "DanhSachNhapHang": "other",
+        "DanhSachSanPham": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'BaoCaoTonKho': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachChiTietNhapHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachHoaDon': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachHoaDonChiTiet': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachHoaDonPhongBan': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachKhachHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachNhapHang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'DanhSachSanPham': Khong co backend LLM (backend=None), fallback rule-based.",
+        "Đã khử 1143 dòng trùng (mã đơn + toàn bộ dòng) theo luật lỗi xuất file.",
+        "Bảng 'DanhSachChiTietNhapHang': không tìm được bảng quy đổi hay cột quy đổi sẵn nên giữ nguyên số lượng gốc, chưa thêm '_qty_base'."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 21.31
+    },
+    {
+      "business_id": "biz_129",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "chi_tiet_don",
+        "don_hang",
+        "khach_hang",
+        "san_pham",
+        "thanh_toan"
+      ],
+      "rows_in": 222331,
+      "rows_out": 222331,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 15,
+      "new_mapped_count": 15,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 5,
+      "sources": {
+        "chi_tiet_don": "rule_fallback",
+        "don_hang": "rule_fallback",
+        "khach_hang": "rule_fallback",
+        "san_pham": "rule_fallback",
+        "thanh_toan": "rule_fallback"
+      },
+      "table_roles": {
+        "chi_tiet_don": "other",
+        "don_hang": "other",
+        "khach_hang": "other",
+        "san_pham": "other",
+        "thanh_toan": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'chi_tiet_don': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'don_hang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'khach_hang': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'san_pham': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'thanh_toan': Khong co backend LLM (backend=None), fallback rule-based."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 1.84
+    },
+    {
+      "business_id": "biz_130",
+      "status": "ok",
+      "error": null,
+      "tables": [
+        "Danh sách hàng hóa",
+        "So_chi_tiet_ban_hang"
+      ],
+      "rows_in": 172591,
+      "rows_out": 172591,
+      "rows_match": true,
+      "rows_diff_reason": null,
+      "baseline_mapped_count": 12,
+      "new_mapped_count": 12,
+      "llm_added_mappings": {},
+      "llm_added_count": 0,
+      "rejected_mappings": [],
+      "rejected_count": 0,
+      "fallback_count": 2,
+      "sources": {
+        "Danh sách hàng hóa": "rule_fallback",
+        "So_chi_tiet_ban_hang": "rule_fallback"
+      },
+      "table_roles": {
+        "Danh sách hàng hóa": "other",
+        "So_chi_tiet_ban_hang": "other"
+      },
+      "profile_delta": {},
+      "warnings": [
+        "llm_ingest: Bang 'Danh sách hàng hóa': Khong co backend LLM (backend=None), fallback rule-based.",
+        "llm_ingest: Bang 'So_chi_tiet_ban_hang': Khong co backend LLM (backend=None), fallback rule-based."
+      ],
+      "readme_found": true,
+      "readme_truncated": false,
+      "elapsed_seconds": 28.29
+    }
+  ],
+  "totals": {
+    "shops": 30,
+    "shops_ok": 30,
+    "tables": 153,
+    "rows_in": 3997042,
+    "rows_out": 3982749,
+    "rows_match_all": true,
+    "llm_added_mappings": 0,
+    "rejected_mappings": 0,
+    "fallback_count": 153,
+    "sources": {
+      "rule_fallback": 153
+    },
+    "elapsed_seconds": 425.49
+  },
+  "backend_used": "none_fallback",
+  "model_id": null,
+  "llm_module_available": true,
+  "llm_import_error": null,
+  "baseline_note": null,
+  "phase1_sha256_before": {
+    "ingest.py": "89a61c1111b3de0437e34385f4727dc0ce26ee58c26f497b675831947d375643",
+    "normalizers.py": "7a62cab0575150987a714c23d2c523dd4d37e9dbdda56b7bb33b64487cdd20f8"
+  },
+  "phase1_sha256_after": {
+    "ingest.py": "89a61c1111b3de0437e34385f4727dc0ce26ee58c26f497b675831947d375643",
+    "normalizers.py": "7a62cab0575150987a714c23d2c523dd4d37e9dbdda56b7bb33b64487cdd20f8"
+  },
+  "phase1_sha256_changed": false
+}

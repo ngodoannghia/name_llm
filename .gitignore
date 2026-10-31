@@ -1,0 +1,10 @@
+# Khong bao gio commit file chua key / credential
+.env
+# Cache ingest va file tam
+cache/
+__pycache__/
+*.pyc
+*.zip
+# Log chay (co the chua duong dan may cuc bo)
+reports_openai/run.log
+reports/run.log

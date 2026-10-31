@@ -1,0 +1,68 @@
+{
+  "backend": "llm_parser",
+  "error_groups": {
+    "parser": {
+      "count": 4,
+      "examples": [
+        {
+          "id": "q_1703b4f93db8",
+          "business_id": "biz_101",
+          "measure": "unknown",
+          "parse_source": "template_fallback"
+        },
+        {
+          "id": "q_7c8afb8a81e9",
+          "business_id": "biz_101",
+          "measure": "unknown",
+          "parse_source": "template_fallback"
+        },
+        {
+          "id": "q_879535b41a21",
+          "business_id": "biz_101",
+          "measure": "unknown",
+          "parse_source": "template_fallback"
+        }
+      ]
+    }
+  },
+  "parser_remaining": 4,
+  "parser_baseline": 791,
+  "parser_change_vs_baseline": -787,
+  "parse_sources": {
+    "template_fallback": 20
+  },
+  "wrong_by_measure": {
+    "revenue": {
+      "count": 1,
+      "examples": [
+        {
+          "id": "q_5049522ff12c",
+          "business_id": "biz_101"
+        }
+      ]
+    }
+  },
+  "wrong_by_business": {
+    "biz_101": {
+      "count": 1,
+      "examples": [
+        {
+          "id": "q_5049522ff12c"
+        }
+      ]
+    }
+  },
+  "verdict_counts": {
+    "correct": 15,
+    "abstain": 4,
+    "wrong": 1
+  },
+  "shop_errors": {},
+  "shop_timings": {
+    "biz_101": {
+      "seconds": 6.285,
+      "questions": 20,
+      "cache_hit": false
+    }
+  }
+}
