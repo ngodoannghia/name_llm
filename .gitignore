@@ -8,3 +8,9 @@ __pycache__/
 # Log chay (co the chua duong dan may cuc bo)
 reports_openai/run.log
 reports/run.log
+
+# Output va venv cua adk_agent (chi code + skill + test moi commit)
+adk_agent/.venv/
+adk_agent/output_*/
+adk_agent/artifacts/
+adk_agent/.pytest_cache/
