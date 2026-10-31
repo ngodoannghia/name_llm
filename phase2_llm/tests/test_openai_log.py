@@ -9,8 +9,9 @@ Mục đích:
       2. ``build_openai_log_record`` ráp đúng một bản ghi câu hỏi:
          câu hỏi, context shop đã gửi cho model, từng lần gọi model,
          kết quả parse, đáp án cuối — và bản ghi ghi được bằng json.
-      3. ``OpenAICallLogger`` ghi JSONL: dòng run + dòng question đọc
-         lại được bằng json.loads, theo đúng thứ tự ghi.
+      3. ``OpenAICallLogger`` ghi MỘT file JSON duy nhất với 2 khóa
+         ``run`` và ``questions``, đọc lại được bằng json.load,
+         các câu hỏi theo đúng thứ tự ghi.
 
 Cách mock mạng: giống test_openai_backend.py — thay
 ``urllib.request.urlopen`` bằng hàm giả trả về phản hồi Chat
@@ -194,11 +195,11 @@ class TestBuildOpenaiLogRecord(unittest.TestCase):
 class TestOpenAICallLogger(unittest.TestCase):
     """File log_openai phải đọc lại được theo từng dòng JSON."""
 
-    def test_ghi_run_va_question_roi_doc_lai_duoc(self):
+    def test_ghi_run_va_question_roi_doc_lai_duoc_bang_json(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = Path(tmpdir) / "log_openai.jsonl"
+            path = Path(tmpdir) / "log_openai.json"
             logger = OpenAICallLogger(log_path=path)
             try:
                 logger.write_run_record({"model": "gpt-4o-mini", "shops": ["biz_gia"]})
@@ -211,19 +212,43 @@ class TestOpenAICallLogger(unittest.TestCase):
                      "parse_notes": [], "parsed": None, "parse_ms": 1.0,
                      "parse_error": None},
                     {"id": "q_gia", "type": "abstain"}, None))
+                # Câu thứ hai: kiểm tra dấu phẩy phân tách giữa các phần tử.
+                logger.write_question(build_openai_log_record(
+                    {"id": "q_hai", "business_id": "biz_gia",
+                     "question": "câu hỏi hai", "as_of_date": "2026-06-16"},
+                    {"question_text": "câu hỏi hai", "as_of": "2026-06-16",
+                     "products": [], "customers": [], "calls": [],
+                     "parse_source": "llm", "parse_confidence": 0.9,
+                     "parse_notes": [], "parsed": None, "parse_ms": 1.0,
+                     "parse_error": None},
+                    {"id": "q_hai", "type": "number", "answer": 5}, None))
             finally:
                 logger.close()
-            lines = path.read_text(encoding="utf-8").strip().splitlines()
-            self.assertEqual(len(lines), 2)
-            run_record = json.loads(lines[0])
-            question_record = json.loads(lines[1])
-            self.assertEqual(run_record["record_type"], "run")
-            self.assertEqual(run_record["model"], "gpt-4o-mini")
-            self.assertEqual(question_record["record_type"], "question")
-            self.assertEqual(question_record["final_answer"]["entry"]["type"], "abstain")
+            # Toàn bộ file phải là MỘT JSON hợp lệ, không phải JSONL.
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(set(data.keys()), {"run", "questions"})
+            self.assertEqual(data["run"]["model"], "gpt-4o-mini")
+            self.assertEqual(len(data["questions"]), 2)
+            self.assertEqual(data["questions"][0]["question_id"], "q_gia")
+            self.assertEqual(
+                data["questions"][0]["final_answer"]["entry"]["type"], "abstain")
+            self.assertEqual(data["questions"][1]["question_id"], "q_hai")
+            self.assertEqual(
+                data["questions"][1]["final_answer"]["entry"]["answer"], 5)
             # File không chứa key giả (test này không dùng key thật, nhưng
             # assert để khóa quy tắc: logger không bao giờ ghi key).
             self.assertNotIn(FAKE_KEY, path.read_text(encoding="utf-8"))
+
+    def test_dong_file_khi_chua_ghi_gi_van_la_json_hop_le(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "log_openai.json"
+            logger = OpenAICallLogger(log_path=path)
+            logger.close()
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self.assertIsNone(data["run"])
+            self.assertEqual(data["questions"], [])
 
     def test_tat_log_thi_khong_ghi_file(self):
         logger = OpenAICallLogger(log_path=None)

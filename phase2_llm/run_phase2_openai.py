@@ -245,17 +245,36 @@ def build_openai_log_record(question, parse_context, entry, info,
 
 
 class OpenAICallLogger:
-    """Ghi log_openai: một dòng JSON cho mỗi câu hỏi, ghi tăng dần.
+    """Ghi log_openai: MỘT file JSON duy nhất, ghi tăng dần từng câu.
 
-    Định dạng file: JSONL, mỗi dòng là một dict do
-    :func:`build_openai_log_record` dựng, cộng thêm một dòng đầu tiên
-    có ``record_type="run"`` ghi cấu hình đợt chạy (model, base_url,
-    tham số, đường dẫn, shops, limit — KHÔNG chứa key). Người đọc chỉ
-    cần lọc các dòng có ``record_type="question"`` là được một bản ghi
-    đầy đủ cho mỗi câu: câu hỏi, context đã gửi cho model (system/user
-    prompt, danh sách thực thể shop), từng lần gọi model (raw output,
-    JSON đã parse, lỗi), kết quả parse cuối, và đáp án cuối của
-    solver/gate.
+    Định dạng file (JSON, không phải JSONL):
+        {
+          "run": {...cấu hình đợt chạy...},
+          "questions": [
+            {...bản ghi câu hỏi 1...},
+            {...bản ghi câu hỏi 2...}
+          ]
+        }
+
+    ``run`` là dict do main truyền vào (model, base_url, tham số,
+    đường dẫn, shops, limit — KHÔNG chứa key). Mỗi phần tử trong
+    ``questions`` là một dict do :func:`build_openai_log_record` dựng:
+    câu hỏi, context đã gửi cho model (system/user prompt, danh sách
+    thực thể shop), từng lần gọi model (raw output, JSON đã parse,
+    lỗi), kết quả parse cuối, và đáp án cuối của solver/gate. Người
+    đọc mở file bằng bất kỳ trình xem JSON nào cũng thấy đúng cấu
+    trúc này, không cần lọc dòng theo record_type như bản JSONL cũ.
+
+    Ghi tăng dần như thế nào: file được mở ở ``__init__`` và chỉ ghi
+    dấu ``{``; ``write_run_record`` ghi khóa ``run`` rồi mở mảng
+    ``questions``; mỗi ``write_question`` ghi thêm một phần tử (có
+    dấu phẩy phân tách) và flush ngay, nên nếu đợt chạy đang chạy dở
+    mà bị dừng thì các câu đã xong vẫn nằm trong file — chỉ có điều
+    file lúc đó CHƯA đóng ngoặc (chưa phải JSON hợp lệ) cho tới khi
+    ``close()`` ghi ``]}`` kết thúc. Đây là đánh đổi cố ý: giữ được
+    tính ghi tăng dần (không phải giữ cả 3.000 bản ghi trong RAM rồi
+    mới ghi một lần ở cuối) mà vẫn ra file JSON chuẩn khi chạy xong
+    bình thường qua finally của main.
 
     Lưu ý về kích thước: prompt đầy đủ (kèm danh sách thực thể và
     schema) được ghi nguyên vẹn cho mỗi câu, không cắt ngắn, vì mục
@@ -268,33 +287,63 @@ class OpenAICallLogger:
     def __init__(self, log_path=None):
         self._handle = None
         self.log_path = None
+        self._run_written = False
+        self._questions_opened = False
+        self._question_count = 0
         if log_path is not None:
             log_path = Path(log_path)
             log_path.parent.mkdir(parents=True, exist_ok=True)
             self._handle = open(log_path, "w", encoding="utf-8")
+            self._handle.write("{\n")
             self.log_path = str(log_path)
 
     def write_run_record(self, record):
-        """Ghi dòng đầu tiên (record_type='run') nếu file đang mở."""
-        if self._handle is None:
+        """Ghi khóa 'run' và mở mảng 'questions' (chỉ ghi một lần)."""
+        if self._handle is None or self._run_written:
             return
         self._handle.write(
-            json.dumps(
-                {"record_type": "run", **_json_safe(record)},
-                ensure_ascii=False) + "\n")
+            '  "run": '
+            + json.dumps(_json_safe(record), ensure_ascii=False, indent=2)
+            + ",\n  \"questions\": [")
+        self._run_written = True
+        self._questions_opened = True
         self._handle.flush()
 
+    def _open_questions_if_needed(self):
+        """Mở mảng 'questions' khi chưa có run (phòng trường hợp lạ)."""
+        if not self._questions_opened:
+            self._handle.write('  "run": null,\n  "questions": [')
+            self._run_written = True
+            self._questions_opened = True
+
     def write_question(self, record):
-        """Ghi một dòng câu hỏi (record_type='question'), flush ngay."""
+        """Ghi thêm một phần tử vào mảng 'questions', flush ngay."""
         if self._handle is None:
             return
-        self._handle.write(
-            json.dumps(_json_safe(record), ensure_ascii=False) + "\n")
+        self._open_questions_if_needed()
+        # Thụt lề bản ghi 4 khoảng trắng cho khớp với mảng questions.
+        dumped = json.dumps(_json_safe(record), ensure_ascii=False, indent=2)
+        indented = "\n".join("    " + line for line in dumped.splitlines())
+        if self._question_count > 0:
+            self._handle.write(",")
+        self._handle.write("\n" + indented)
+        self._question_count += 1
         self._handle.flush()
 
     def close(self):
-        """Đóng file log (nếu có). Gọi trong finally của main."""
+        """Đóng mảng 'questions' và object gốc, rồi đóng file.
+
+        Chỉ khi close() chạy thì file mới là JSON hợp lệ hoàn chỉnh;
+        gọi trong finally của main để đợt chạy bình thường luôn có
+        file JSON hợp lệ, kể cả khi shop lỗi giữa chừng.
+        """
         if self._handle is not None:
+            if self._questions_opened:
+                self._handle.write("\n  ]\n}\n")
+            else:
+                # File mới mở mà chưa ghi gì (ví dụ fail-fast trước
+                # khi ghi run): vẫn đóng thành JSON hợp lệ rỗng.
+                self._handle.write('  "run": null,\n  "questions": []\n}\n')
             self._handle.close()
             self._handle = None
 
@@ -547,11 +596,12 @@ def parse_args(argv=None):
              "không log từng câu / từng lần gọi API thành công.")
     parser.add_argument(
         "--log-openai", default=None,
-        help="Đường dẫn file log_openai (mặc định: <reports-dir>/log_openai.jsonl; "
-             "dùng --no-log-openai để tắt). File này là JSONL, mỗi dòng là "
-             "một câu hỏi đầy đủ: câu hỏi, context đã gửi cho model, từng "
-             "lần gọi model (raw output + JSON đã parse), kết quả parse "
-             "và đáp án cuối. KHÔNG chứa key API.")
+        help="Đường dẫn file log_openai (mặc định: <reports-dir>/log_openai.json; "
+             "dùng --no-log-openai để tắt). File này là JSON duy nhất với "
+             "2 khóa: \"run\" (cấu hình đợt chạy) và \"questions\" (mảng các "
+             "bản ghi câu hỏi đầy đủ: câu hỏi, context đã gửi cho model, "
+             "từng lần gọi model (raw output + JSON đã parse), kết quả parse "
+             "và đáp án cuối). KHÔNG chứa key API.")
     parser.add_argument(
         "--no-log-openai", action="store_true",
         help="Không ghi file log_openai, chỉ ghi console + run.log như cũ.")
@@ -590,10 +640,10 @@ def main(argv=None):
     else:
         log_file = reports_dir / "run.log"
     logger = ConsoleLogger(log_file=log_file, quiet=args.quiet)
-    # File log_openai: mặc định vào reports_dir, ghi JSONL theo từng câu.
+    # File log_openai: mặc định vào reports_dir, ghi JSON theo từng câu.
     # Tạo logger ở đây (trước khi kiểm tra key) để đường dẫn luôn được
     # in ra ở log bắt đầu; nếu thiếu key thì runner vẫn fail-fast ở
-    # dưới và file log_openai chỉ có dòng run (nếu đã ghi) hoặc rỗng.
+    # dưới và file log_openai chỉ có khóa run (nếu đã ghi) hoặc rỗng.
     if args.no_log_openai:
         log_openai_path = None
     elif args.log_openai:
@@ -601,7 +651,7 @@ def main(argv=None):
         if not log_openai_path.is_absolute():
             log_openai_path = (_PHASE2_LLM_DIR / log_openai_path).resolve()
     else:
-        log_openai_path = reports_dir / "log_openai.jsonl"
+        log_openai_path = reports_dir / "log_openai.json"
     openai_logger = OpenAICallLogger(log_path=log_openai_path)
     try:
         # Fail-fast: nếu thiếu key thì dừng ngay, không chạy pipeline rồi mới
