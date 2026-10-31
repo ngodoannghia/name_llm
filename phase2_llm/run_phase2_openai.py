@@ -64,6 +64,7 @@ Cách dùng:
 
 import argparse
 import datetime
+import json
 import sys
 import time
 from pathlib import Path
@@ -91,6 +92,211 @@ def _short(text, max_len=120):
     if len(cleaned) > max_len:
         return cleaned[:max_len] + "..."
     return cleaned
+
+
+def _json_safe(value):
+    """Chuyển một giá trị về dạng ghi được bằng json.dumps, không crash.
+
+    Danh sách thực thể của shop có thể chứa tuple, date, hoặc object lạ;
+    thay vì để json.dumps raise giữa đợt chạy, các giá trị đó được
+    chuyển thành chuỗi. Dict/list được chuyển đệ quy để vẫn giữ được
+    cấu trúc khi đọc lại log_openai.
+    """
+    import json as _json
+
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    try:
+        _json.dumps(value)
+        return value
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _parsed_to_dict(parsed):
+    """Chuyển ParsedQuestion thành dict thuần JSON, hoặc None nếu không có.
+
+    Dùng dataclasses.asdict khi được (ParsedQuestion là dataclass), nếu
+    không thì đọc thủ công các trường hay dùng. Trường lạ không có trong
+    hai cách trên thì bị bỏ, không được làm chết log.
+    """
+    if parsed is None:
+        return None
+    try:
+        import dataclasses
+
+        if dataclasses.is_dataclass(parsed):
+            return _json_safe(dataclasses.asdict(parsed))
+    except Exception:  # noqa: BLE001 - log không được làm chết pipeline
+        pass
+    result = {}
+    for field_name in (
+        "measure", "entity_kind", "entity_key", "entity_display",
+        "period_start", "period_end", "period_kind", "period_months",
+        "ranking_k", "ranking_target", "ranking_metric", "unit",
+        "threshold_money", "threshold_op", "answer_type",
+        "confidence_parse",
+    ):
+        if hasattr(parsed, field_name):
+            result[field_name] = _json_safe(getattr(parsed, field_name))
+    return result or None
+
+
+def build_openai_log_record(question, parse_context, entry, info,
+                            question_seconds=None):
+    """Dựng một bản ghi log_openai cho một câu hỏi, dạng dict thuần JSON.
+
+    Đây là hàm thuần (không ghi file, không gọi API) để test được độc
+    lập: caller truyền vào những gì nó đã thu thập được, hàm chỉ ráp
+    lại thành một dict có cấu trúc cố định.
+
+    Đầu vào:
+        question: dict câu hỏi gốc (có ``id``, ``business_id``,
+            ``question``, ``as_of_date``).
+        parse_context: dict do parse_fn thu thập, có thể thiếu một số
+            khóa (hàm dùng .get với mặc định an toàn): ``question_text``
+            (câu hỏi mà parse_fn nhận), ``as_of`` (ngày đã giải),
+            ``products``, ``customers`` (danh sách thực thể đã đưa cho
+            parser), ``calls`` (list bản ghi từ backend.call_log cho
+            câu này, mỗi bản ghi đã có system/user prompt, raw output,
+            parsed_json, lỗi, thời gian), ``parse_source``,
+            ``parse_confidence``, ``parse_notes``, ``parsed``
+            (ParsedQuestion cuối), ``parse_ms``, ``parse_error``.
+        entry: dict submission cuối của câu hỏi (có thể None nếu câu
+            chưa tới bước giải, ví dụ shop lỗi).
+        info: dict thông tin phân tích của solve_one_question (có thể
+            None): ``measure``, ``status``, ``error_group``,
+            ``confidence``.
+        question_seconds: thời gian giải câu hỏi (giây), hoặc None.
+
+    Đầu ra:
+        Dict với các khóa cố định, theo thứ tự đọc từ ngoài vào trong:
+        ``record_type`` (luôn ``"question"``), ``timestamp``,
+        ``question_id``, ``business_id``, ``question``,
+        ``as_of_date``, ``shop_entities`` (products/customers đã đưa
+        cho parser — ĐÂY là toàn bộ dữ liệu shop mà model được thấy;
+        model KHÔNG được thấy dòng đơn, doanh số, hay bảng dữ liệu thô,
+        nên log này không có và không được có các dữ liệu đó),
+        ``model_calls`` (mỗi lần gọi: kind suy từ thứ tự trong câu —
+        lần đầu là ``initial``, các lần sau là ``repair`` — kèm tham số,
+        system/user prompt đầy đủ, raw output, JSON đã parse, lỗi),
+        ``parse_result`` (source, confidence, parsed cuối, notes),
+        ``final_answer`` (entry + info của solver/gate).
+        Bản ghi KHÔNG chứa key API: backend.call_log vốn đã không chứa
+        key, và hàm này không nhận thêm trường nào chứa key.
+    """
+    calls = parse_context.get("calls") or []
+    model_calls = []
+    for index, call in enumerate(calls):
+        call = dict(call) if isinstance(call, dict) else {}
+        model_calls.append({
+            "kind": "initial" if index == 0 else "repair",
+            "model": call.get("model"),
+            "endpoint": call.get("endpoint"),
+            "base_url": call.get("base_url"),
+            "temperature": call.get("temperature"),
+            "top_p": call.get("top_p"),
+            "max_tokens": call.get("max_tokens"),
+            "response_format": call.get("response_format"),
+            "system_message": call.get("system_message"),
+            "user_prompt": call.get("user_prompt"),
+            "raw_content": call.get("raw_content"),
+            "cleaned_text": call.get("cleaned_text"),
+            "parsed_json": _json_safe(call.get("parsed_json")),
+            "error": call.get("error"),
+            "elapsed_ms": call.get("elapsed_ms"),
+        })
+    return {
+        "record_type": "question",
+        "timestamp": datetime.datetime.now().isoformat(),
+        "question_id": str(question.get("id")) if question.get("id") is not None else None,
+        "business_id": question.get("business_id"),
+        "question": question.get("question"),
+        "as_of_date": question.get("as_of_date"),
+        "question_text_for_parse": parse_context.get("question_text"),
+        "as_of_resolved": str(parse_context.get("as_of"))
+        if parse_context.get("as_of") is not None else None,
+        "shop_entities": {
+            "products": _json_safe(parse_context.get("products")),
+            "customers": _json_safe(parse_context.get("customers")),
+        },
+        "model_calls": model_calls,
+        "parse_result": {
+            "source": parse_context.get("parse_source"),
+            "confidence": parse_context.get("parse_confidence"),
+            "notes": parse_context.get("parse_notes"),
+            "parsed": _parsed_to_dict(parse_context.get("parsed")),
+            "parse_ms": parse_context.get("parse_ms"),
+            "parse_error": parse_context.get("parse_error"),
+        },
+        "final_answer": {
+            "entry": _json_safe(entry),
+            "measure": (info or {}).get("measure"),
+            "status": (info or {}).get("status"),
+            "error_group": (info or {}).get("error_group"),
+            "confidence": (info or {}).get("confidence"),
+        },
+        "question_seconds": question_seconds,
+    }
+
+
+class OpenAICallLogger:
+    """Ghi log_openai: một dòng JSON cho mỗi câu hỏi, ghi tăng dần.
+
+    Định dạng file: JSONL, mỗi dòng là một dict do
+    :func:`build_openai_log_record` dựng, cộng thêm một dòng đầu tiên
+    có ``record_type="run"`` ghi cấu hình đợt chạy (model, base_url,
+    tham số, đường dẫn, shops, limit — KHÔNG chứa key). Người đọc chỉ
+    cần lọc các dòng có ``record_type="question"`` là được một bản ghi
+    đầy đủ cho mỗi câu: câu hỏi, context đã gửi cho model (system/user
+    prompt, danh sách thực thể shop), từng lần gọi model (raw output,
+    JSON đã parse, lỗi), kết quả parse cuối, và đáp án cuối của
+    solver/gate.
+
+    Lưu ý về kích thước: prompt đầy đủ (kèm danh sách thực thể và
+    schema) được ghi nguyên vẹn cho mỗi câu, không cắt ngắn, vì mục
+    đích của file này là chẩn đoán tuning — cắt ngắn sẽ mất đúng chỗ
+    cần xem (thực thể nào có/không có trong prompt, model trả field
+    nào sai). Đổi lại, file sẽ lớn theo số câu: với prompt ~12.000 ký
+    tự, 3.000 câu sẽ vào khoảng vài chục MB. Đây là file phát triển,
+    KHÔNG đưa vào Docker cuối và không commit (giống run.log).
+    """
+    def __init__(self, log_path=None):
+        self._handle = None
+        self.log_path = None
+        if log_path is not None:
+            log_path = Path(log_path)
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            self._handle = open(log_path, "w", encoding="utf-8")
+            self.log_path = str(log_path)
+
+    def write_run_record(self, record):
+        """Ghi dòng đầu tiên (record_type='run') nếu file đang mở."""
+        if self._handle is None:
+            return
+        self._handle.write(
+            json.dumps(
+                {"record_type": "run", **_json_safe(record)},
+                ensure_ascii=False) + "\n")
+        self._handle.flush()
+
+    def write_question(self, record):
+        """Ghi một dòng câu hỏi (record_type='question'), flush ngay."""
+        if self._handle is None:
+            return
+        self._handle.write(
+            json.dumps(_json_safe(record), ensure_ascii=False) + "\n")
+        self._handle.flush()
+
+    def close(self):
+        """Đóng file log (nếu có). Gọi trong finally của main."""
+        if self._handle is not None:
+            self._handle.close()
+            self._handle = None
 
 
 class ConsoleLogger:
@@ -339,6 +545,16 @@ def parse_args(argv=None):
         "--quiet", action="store_true",
         help="Ít log hơn: chỉ log bắt đầu, lỗi API, tổng kết và cảnh báo, "
              "không log từng câu / từng lần gọi API thành công.")
+    parser.add_argument(
+        "--log-openai", default=None,
+        help="Đường dẫn file log_openai (mặc định: <reports-dir>/log_openai.jsonl; "
+             "dùng --no-log-openai để tắt). File này là JSONL, mỗi dòng là "
+             "một câu hỏi đầy đủ: câu hỏi, context đã gửi cho model, từng "
+             "lần gọi model (raw output + JSON đã parse), kết quả parse "
+             "và đáp án cuối. KHÔNG chứa key API.")
+    parser.add_argument(
+        "--no-log-openai", action="store_true",
+        help="Không ghi file log_openai, chỉ ghi console + run.log như cũ.")
     args = parser.parse_args(argv)
     if args.limit is not None and args.limit <= 0:
         args.limit = None
@@ -374,6 +590,19 @@ def main(argv=None):
     else:
         log_file = reports_dir / "run.log"
     logger = ConsoleLogger(log_file=log_file, quiet=args.quiet)
+    # File log_openai: mặc định vào reports_dir, ghi JSONL theo từng câu.
+    # Tạo logger ở đây (trước khi kiểm tra key) để đường dẫn luôn được
+    # in ra ở log bắt đầu; nếu thiếu key thì runner vẫn fail-fast ở
+    # dưới và file log_openai chỉ có dòng run (nếu đã ghi) hoặc rỗng.
+    if args.no_log_openai:
+        log_openai_path = None
+    elif args.log_openai:
+        log_openai_path = Path(args.log_openai)
+        if not log_openai_path.is_absolute():
+            log_openai_path = (_PHASE2_LLM_DIR / log_openai_path).resolve()
+    else:
+        log_openai_path = reports_dir / "log_openai.jsonl"
+    openai_logger = OpenAICallLogger(log_path=log_openai_path)
     try:
         # Fail-fast: nếu thiếu key thì dừng ngay, không chạy pipeline rồi mới
         # phát hiện mọi câu đều fallback về template. Thông báo lỗi ở đây
@@ -409,8 +638,25 @@ def main(argv=None):
         logger.log(
             f"Đường dẫn: train_dir={train_dir}, cache_dir={cache_dir}, "
             f"output={output_path}, reports_dir={reports_dir}, "
-            f"log_file={logger.log_file or '(tắt file log)'}",
+            f"log_file={logger.log_file or '(tắt file log)'}, "
+            f"log_openai={openai_logger.log_path or '(tắt log_openai)'}",
             important=True)
+        openai_logger.write_run_record({
+            "model": config.model,
+            "base_url": config.base_url,
+            "endpoint": "/chat/completions",
+            "response_format": {"type": "json_object"},
+            "temperature": config.temperature,
+            "top_p": config.top_p,
+            "max_tokens": config.max_output_tokens,
+            "timeout_seconds": config.timeout_seconds,
+            "train_dir": str(train_dir),
+            "cache_dir": str(cache_dir),
+            "output": str(output_path),
+            "reports_dir": str(reports_dir),
+            "shops": shops,
+            "limit": args.limit,
+        })
         logger.log(f"Shops: {shops or '(tất cả)'}, limit: {args.limit or '(không giới hạn)'}",
                    important=True)
         logger.log("=" * 70, important=True)
@@ -423,13 +669,53 @@ def main(argv=None):
         # mong đợi, nhưng thứ tự bên trong là LLM trước, lỗi thì template
         # (xem parse_with_llm_first), và log kết quả parse kèm notes —
         # notes là nơi llm_parser ghi lý do fallback.
+        # Context log_openai của câu đang parse: parse_fn không nhận id
+        # câu hỏi (chữ ký của solve_one_question chỉ truyền text + as_of),
+        # nên bản ghi đầy đủ (kèm id) chỉ ráp được ở on_question, khi
+        # question dict đã có. Pipeline chạy tuần tự từng câu (parse rồi
+        # giải rồi mới sang câu sau), nên một slot pending là đủ; on_shop
+        # sẽ flush slot này nếu một shop lỗi khiến on_question không
+        # được gọi cho câu cuối.
+        pending_openai = {}
+
         def parse_fn(question_text, as_of, calendar, rulebook, products, customers):
             parse_started = time.perf_counter()
-            result = parse_with_llm_first(
-                question_text, as_of, calendar, rulebook,
-                products, customers, backend=backend, logger=logger,
-            )
+            # Cắt lát call_log của backend thật theo từng câu: các lần
+            # gọi trong parse này (1 lần đầu + tối đa 2 repair) là đúng
+            # đoạn mới thêm vào từ đây tới sau khi parse xong.
+            call_start = len(getattr(real_backend, "call_log", []) or [])
+            parse_error = None
+            try:
+                result = parse_with_llm_first(
+                    question_text, as_of, calendar, rulebook,
+                    products, customers, backend=backend, logger=logger,
+                )
+            except Exception as exc:  # noqa: BLE001 - vẫn lưu context rồi raise lại
+                parse_error = repr(exc)
+                raise
+            finally:
+                calls = list((getattr(real_backend, "call_log", []) or [])[call_start:])
+                pending_openai.clear()
+                pending_openai["context"] = {
+                    "question_text": question_text,
+                    "as_of": as_of,
+                    "products": products,
+                    "customers": customers,
+                    "calls": calls,
+                    "parse_error": parse_error,
+                }
             parse_ms = (time.perf_counter() - parse_started) * 1000
+            # Điền tiếp kết quả parse vào context đã lưu (parse thành
+            # công tới đây thì result đã có; parse_error ở trên chỉ xảy
+            # ra khi parse_with_llm_first raise, lúc đó finally đã lưu
+            # context với parse_error và hàm đã raise, không tới đây).
+            pending_openai["context"].update({
+                "parse_source": getattr(result, "source", None),
+                "parse_confidence": getattr(result, "confidence", None),
+                "parse_notes": list(getattr(result, "notes", []) or []),
+                "parsed": getattr(result, "parsed", None),
+                "parse_ms": parse_ms,
+            })
             parsed = getattr(result, "parsed", None)
             measure = getattr(parsed, "measure", "?") if parsed is not None else "?"
             notes = "; ".join(str(note) for note in (getattr(result, "notes", []) or []))
@@ -447,6 +733,19 @@ def main(argv=None):
 
         def on_question(question, entry, info, elapsed_seconds):
             question_counter["n"] += 1
+            # Ghi log_openai: ráp bản ghi đầy đủ từ context pending của
+            # parse_fn (cùng câu hỏi, vì pipeline chạy tuần tự) + entry
+            # và info của câu này. Nếu pending không khớp câu (trường
+            # hợp hiếm: parse_fn không chạy cho câu này), vẫn ghi bản
+            # ghi với calls rỗng để không mất câu khỏi log_openai.
+            context = pending_openai.pop("context", None) or {}
+            if context.get("question_text") != question.get("question"):
+                # Không khớp text thì không dùng context cũ (tránh gán
+                # nhầm prompt của câu khác); giữ lại calls rỗng.
+                context = {}
+            openai_logger.write_question(build_openai_log_record(
+                question, context, entry, info,
+                question_seconds=elapsed_seconds))
             answer = entry.get("answer", "")
             logger.log(
                 f"[Q {question_counter['n']}] {question.get('business_id')} "
@@ -462,6 +761,20 @@ def main(argv=None):
                    if info.get("runner_error") else ""))
 
         def on_shop(business_id, n_questions, cache_hit, seconds, errors):
+            # Flush context còn sót (câu cuối của shop lỗi mà on_question
+            # không được gọi): ghi nó với entry abstain để log_openai
+            # không thiếu câu, kèm ghi chú trong parse_error nếu có.
+            if pending_openai.get("context") is not None:
+                context = pending_openai.pop("context")
+                openai_logger.write_question(build_openai_log_record(
+                    {"id": None, "business_id": business_id,
+                     "question": context.get("question_text"),
+                     "as_of_date": str(context.get("as_of"))
+                     if context.get("as_of") is not None else None},
+                    context, {"type": "abstain"},
+                    {"measure": None, "status": "abstain",
+                     "error_group": "shop_error", "confidence": 0.0},
+                    question_seconds=None))
             logger.log(
                 f"[SHOP DONE] {business_id}: {n_questions} câu, "
                 f"cache={'hit' if cache_hit else 'miss'}, {seconds:.1f}s"
@@ -486,7 +799,8 @@ def main(argv=None):
         logger.log(
             f"LLM API: {backend.calls} lần gọi, {backend.failures} lần lỗi. "
             f"File submission: {output_path}. File báo cáo: {reports_dir}. "
-            f"File log: {logger.log_file or '(tắt file log)'}",
+            f"File log: {logger.log_file or '(tắt file log)'}. "
+            f"File log_openai: {openai_logger.log_path or '(tắt log_openai)'}",
             important=True)
         if summary["shop_errors"]:
             logger.log(
@@ -506,6 +820,7 @@ def main(argv=None):
         logger.log("=" * 70, important=True)
         return 0
     finally:
+        openai_logger.close()
         logger.close()
 
 

@@ -287,6 +287,15 @@ class OpenAIChatBackend:
 
     def __init__(self, config=None, env_file=None):
         self.config = config if config is not None else OpenAIConfig(env_file=env_file)
+        # Nhật ký các lần gọi API của chính backend này, để runner ghi
+        # log_openai theo từng câu hỏi. Mỗi bản ghi là dict thuần JSON
+        # (xem generate_json): model, endpoint, tham số, system/user
+        # message, nội dung thô model trả về, JSON đã parse, lỗi nếu có,
+        # thời gian gọi. KHÔNG BAO GIỜ chứa key API: key chỉ nằm trong
+        # header Authorization của request, không nằm trong payload hay
+        # bản ghi này. Runner đọc danh sách này theo chỉ số (cắt lát
+        # theo từng câu hỏi) chứ không được sửa nó trực tiếp.
+        self.call_log = []
 
     def _build_system_message(self, schema):
         """Dựng system message cho Chat Completions từ schema.
@@ -395,7 +404,8 @@ class OpenAIChatBackend:
             lỗi mạng/timeout, hoặc văn bản trả về không phải JSON hợp lệ.
         """
         url = f"{self.config.base_url}/chat/completions"
-        data = json.dumps(self._build_payload(prompt, schema)).encode("utf-8")
+        payload = self._build_payload(prompt, schema)
+        data = json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
             url,
             data=data,
@@ -405,6 +415,32 @@ class OpenAIChatBackend:
                 "Authorization": f"Bearer {self.config.api_key}",
             },
         )
+        # Bản ghi cho lần gọi này: ghi trước vào call_log với trạng thái
+        # đang chờ, rồi điền kết quả/lỗi sau, để cả lần gọi thất bại
+        # cũng còn lại dấu vết cho log_openai (ngược lại, lần gọi lỗi
+        # mà không ghi gì thì người đọc log sẽ tưởng câu đó chưa từng
+        # gọi model). Bản ghi chỉ chứa payload messages, không chứa
+        # header Authorization, nên không thể lộ key.
+        import time as _time
+
+        started = _time.perf_counter()
+        record = {
+            "model": self.config.model,
+            "endpoint": "/chat/completions",
+            "base_url": self.config.base_url,
+            "temperature": self.config.temperature,
+            "top_p": self.config.top_p,
+            "max_tokens": self.config.max_output_tokens,
+            "response_format": {"type": "json_object"},
+            "system_message": payload["messages"][0]["content"],
+            "user_prompt": payload["messages"][1]["content"],
+            "raw_content": None,
+            "cleaned_text": None,
+            "parsed_json": None,
+            "error": None,
+            "elapsed_ms": None,
+        }
+        self.call_log.append(record)
         try:
             with urllib.request.urlopen(request, timeout=self.config.timeout_seconds) as handle:
                 raw = handle.read()
@@ -413,37 +449,57 @@ class OpenAIChatBackend:
             # trong thông báo lỗi của một số proxy) và không retry ở đây:
             # retry vô hạn sẽ đốt quota và treo pipeline; caller fallback
             # về template là hành vi đúng theo hợp đồng.
-            raise RuntimeError(
+            record["error"] = (
                 f"OpenAI Chat Completions API trả lời HTTP {exc.code}; "
                 f"kiểm tra lại OPENAI_API_KEY và OPENAI_MODEL "
                 f"({self.config.model})."
-            ) from exc
+            )
+            record["elapsed_ms"] = (_time.perf_counter() - started) * 1000
+            raise RuntimeError(record["error"]) from exc
         except Exception as exc:  # noqa: BLE001 - lỗi mạng/timeout đều fallback
-            raise RuntimeError(
+            record["error"] = (
                 f"Không gọi được OpenAI Chat Completions API ({type(exc).__name__}); "
                 f"kiểm tra mạng và OPENAI_BASE_URL ({self.config.base_url})."
-            ) from exc
+            )
+            record["elapsed_ms"] = (_time.perf_counter() - started) * 1000
+            raise RuntimeError(record["error"]) from exc
         try:
             response = json.loads(raw.decode("utf-8"))
         except (ValueError, UnicodeDecodeError) as exc:
-            raise RuntimeError(
+            record["error"] = (
                 "Phản hồi OpenAI không phải JSON hợp lệ; không thể trích "
                 "JSON ParsedQuestion."
-            ) from exc
-        text = self._strip_code_fence(self._extract_content(response))
+            )
+            record["elapsed_ms"] = (_time.perf_counter() - started) * 1000
+            raise RuntimeError(record["error"]) from exc
+        try:
+            raw_content = self._extract_content(response)
+        except RuntimeError as exc:
+            record["error"] = str(exc)
+            record["elapsed_ms"] = (_time.perf_counter() - started) * 1000
+            raise
+        record["raw_content"] = raw_content
+        text = self._strip_code_fence(raw_content)
+        record["cleaned_text"] = text
         try:
             parsed = json.loads(text)
         except ValueError as exc:
-            raise RuntimeError(
+            record["error"] = (
                 "Văn bản OpenAI trả về không phải JSON hợp lệ "
                 f"(200 ký tự đầu: {text[:200]!r}); "
                 "llm_parser sẽ repair hoặc fallback về template."
-            ) from exc
+            )
+            record["elapsed_ms"] = (_time.perf_counter() - started) * 1000
+            raise RuntimeError(record["error"]) from exc
         if not isinstance(parsed, dict):
-            raise RuntimeError(
+            record["error"] = (
                 "JSON OpenAI trả về không phải object (dict); "
                 "llm_parser sẽ repair hoặc fallback về template."
             )
+            record["elapsed_ms"] = (_time.perf_counter() - started) * 1000
+            raise RuntimeError(record["error"])
+        record["parsed_json"] = parsed
+        record["elapsed_ms"] = (_time.perf_counter() - started) * 1000
         return parsed
 
 
