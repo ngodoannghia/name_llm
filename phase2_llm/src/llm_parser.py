@@ -20,10 +20,13 @@ Luồng làm việc, theo đúng thứ tự ưu tiên an toàn cho điểm PA
    trong enum của hợp đồng, kỳ phải hợp lệ, thực thể phải tồn tại
    trong shop. Sai ở đâu thì sửa ở đó.
 4. Nếu JSON sai, gọi lại backend tối đa 2 lần với repair prompt liệt
-   kê lỗi. Sau 2 lần vẫn sai thì fallback về parser template.
+   kê lỗi. Sau 2 lần vẫn sai thì raise để caller chuyển thành
+   abstain — KHÔNG fallback về parser template (theo yêu cầu của
+   người dùng ngày 2026-10-31, vì fallback template dựa trên cụm từ
+   của train nên rất hên xui trên test).
 5. Nếu backend không khả dụng, hoặc thực thể/kỳ không kiểm chứng
-   được, thì fallback về parser template và KHÔNG BAO GIỜ đoán thực
-   thể hay kỳ để lấp chỗ trống.
+   được, thì raise để abstain và KHÔNG BAO GIỜ đoán thực thể hay
+   kỳ để lấp chỗ trống.
 
 TRUNG THỰC VỀ MODEL — ĐỌC KỸ TRƯỚC KHI ĐÓNG DOCKER:
     Model mặc định CHƯA được chọn và CHƯA được kiểm chứng trong lúc
@@ -480,13 +483,13 @@ def _canonical_entity(kind, key, display, products, customers):
         không khớp thực thể nào của shop; group không có trong shop;
         payment ngoài bảng thanh toán chung; employee/channel không
         có danh sách kiểm chứng trong tham số (theo yêu cầu, trường
-        hợp này phải fallback, không được đoán).
+        hợp này phải raise để abstain, không được đoán).
 
     Vì sao chặt chẽ:
         Đây là chốt chặn chống hallucination quan trọng nhất của
         module: mô hình bịa một tên sản phẩm gần giống tên thật sẽ
         làm solver tính sai hoàn toàn, tệ hơn abstain rất nhiều. Thà
-        fallback về template (rồi gate abstain nếu cần) còn hơn dùng
+        raise để abstain còn hơn dùng
         một thực thể chưa từng tồn tại trong shop.
     """
     norm_key = _normalize_key_local(key)
@@ -538,14 +541,14 @@ def _canonical_entity(kind, key, display, products, customers):
             return (wanted, _KNOWN_PAYMENTS[wanted])
         raise ValueError(
             f"Hình thức thanh toán {key!r}/{display!r} không nằm trong bảng thanh toán "
-            "chung: không thể kiểm chứng, cần fallback."
+            "chung: không thể kiểm chứng, cần raise để abstain."
         )
     # employee/channel: không có danh sách kiểm chứng trong chữ ký
     # validate_and_build (chỉ có products/customers), nên không thể
     # khẳng định thực thể đó có trong shop hay không.
     raise ValueError(
         f"entity_kind '{kind}' không kiểm chứng được từ products/customers của shop: "
-        "cần fallback về parser template thay vì tin mô hình."
+        "cần raise để abstain thay vì tin mô hình."
     )
 
 
@@ -820,22 +823,21 @@ class TransformersBackend(LocalModelBackend):
 
 @dataclass
 class ParseResult:
-    """Kết quả của một lần parse bằng mô hình (kèm fallback).
+    """Kết quả của một lần parse bằng mô hình (KHÔNG fallback template).
 
     Ý nghĩa từng trường:
 
-    - ``parsed``: ParsedQuestion cuối cùng sẽ đưa cho solver. Khi
-      fallback, đây là kết quả của parser template, không phải của
-      mô hình — caller phải đọc ``source`` để biết điều này.
-    - ``source``: ``'llm'`` (mô hình trả JSON hợp lệ ngay lần đầu),
-      ``'repair'`` (mô hình trả JSON hợp lệ sau repair), hoặc
-      ``'template_fallback'`` (đã fallback về parser template, hoặc
-      không có backend/template nào và trả unknown để abstain).
-    - ``confidence``: độ chắc của kết quả cuối. Với nguồn llm/repair
-      thì bằng ``parsed.confidence_parse``; với fallback thì bằng
-      confidence của template (hoặc 0.0 khi không có template).
-    - ``notes``: giải thích ngắn gọn vì sao chọn nguồn này, lỗi nào
-      đã gặp, và vì sao fallback (nếu có) — để báo cáo lỗi truy vết
+    - ``parsed``: ParsedQuestion cuối cùng sẽ đưa cho solver, luôn
+      là kết quả của mô hình (đã qua validate_and_build).
+    - ``source``: ``'llm'`` (mô hình trả JSON hợp lệ ngay lần đầu)
+      hoặc ``'repair'`` (mô hình trả JSON hợp lệ sau repair).
+      Không còn nguồn ``'template_fallback'``: khi mô hình lỗi, hàm
+      parse raise để caller chuyển câu đó thành abstain, thay vì
+      trả kết quả template.
+    - ``confidence``: độ chắc của kết quả cuối, bằng
+      ``parsed.confidence_parse``.
+    - ``notes``: giải thích ngắn gọn vì sao chọn nguồn này và lỗi
+      nào đã gặp trong các lần repair — để báo cáo lỗi truy vết
       được, thay vì chỉ thấy một con số confidence.
     """
 
@@ -1395,7 +1397,7 @@ def validate_and_build(data: dict, products, customers) -> ParsedQuestion:
 
 
 # ---------------------------------------------------------------------------
-# Hàm chính: parse bằng LLM, repair tối đa 2 lần, rồi fallback an toàn.
+# Hàm chính: parse bằng LLM, repair tối đa 2 lần, KHÔNG fallback.
 # ---------------------------------------------------------------------------
 
 def _unknown_parsed(normalized_text):
@@ -1406,13 +1408,11 @@ def _unknown_parsed(normalized_text):
 
     Đầu ra:
         ParsedQuestion với measure/answer_type 'unknown', confidence 0.0
-        và ghi chú rõ là không parse được. Đây là kết quả an toàn nhất
-        khi cả mô hình lẫn template đều không dùng được: gate sẽ
-        abstain thay vì đoán số.
-
-    Vì sao không raise ở đây:
-        parse_with_llm là tầng cuối trước solver/gate; raise sẽ crash
-        cả shop, trong khi một kết quả unknown chỉ làm mất một câu.
+        và ghi chú rõ là không parse được. Hàm này hiện chỉ còn dùng
+        trong kiểm thử và làm tài liệu cho trường hợp unknown; đường
+        suy luận chính không còn dùng nó để thay cho fallback template
+        — khi LLM lỗi, parse_with_llm raise và runner chuyển câu đó
+        thành abstain trực tiếp.
     """
     return ParsedQuestion(
         measure="unknown",
@@ -1431,107 +1431,54 @@ def _unknown_parsed(normalized_text):
         threshold_op=None,
         answer_type="unknown",
         confidence_parse=0.0,
-        parse_notes=["Không parse được bằng LLM lẫn template: trả unknown để abstain."],
+        parse_notes=["Không parse được bằng LLM: trả unknown để abstain."],
         normalized_text=normalized_text,
     )
 
 
-def _fallback_result(question_text, as_of, calendar, rulebook, products, customers, normalized_text, reason_notes):
-    """Chạy parser template làm fallback, hoặc trả unknown nếu không có template.
-
-    Đầu vào:
-        question_text/as_of/calendar/rulebook/products/customers:
-            đúng chữ ký của parse_question template.
-        normalized_text: câu đã chuẩn hoá (để ghi vào kết quả unknown
-            khi template cũng không dùng được).
-        reason_notes: list lý do vì sao phải fallback (lỗi backend,
-            lỗi validate sau repair...), để ghi vào notes cuối.
-
-    Đầu ra:
-        ParseResult với source='template_fallback'. Nếu template chạy
-        được thì confidence là confidence_parse của template và notes
-        gồm lý do fallback + notes của template; nếu template không
-        có hoặc template crash thì trả unknown với confidence 0.0.
-
-    Vì sao template được gọi đúng chữ ký gốc của nó:
-        parse_question của phase2 nhận (question_text, as_of, calendar,
-        rulebook, products, customers) — không nhận groups/payments.
-        Gọi sai chữ ký sẽ crash fallback, đúng lúc cần fallback nhất,
-        nên hàm này chỉ truyền đúng 6 tham số đó.
-    """
-    notes = list(reason_notes)
-    if _PHASE2_AVAILABLE:
-        # Nếu caller không truyền template_parse_fn, vẫn thử dùng
-        # parse_question của phase2 đã nạp được ở đầu module, vì đó
-        # chính là template fallback theo hợp đồng.
-        try:
-            from parser import parse_question as _template_parse
-        except Exception:
-            _template_parse = None
-        if _template_parse is not None:
-            try:
-                parsed = _template_parse(
-                    question_text, as_of, calendar, rulebook, products, customers
-                )
-                template_notes = list(getattr(parsed, "parse_notes", []) or [])
-                return ParseResult(
-                    parsed=parsed,
-                    source="template_fallback",
-                    confidence=float(getattr(parsed, "confidence_parse", 0.0) or 0.0),
-                    notes=notes + ["Fallback về parser template."] + template_notes,
-                )
-            except Exception as exc:
-                notes.append(f"Parser template cũng lỗi: {exc}.")
-    return ParseResult(
-        parsed=_unknown_parsed(normalized_text),
-        source="template_fallback",
-        confidence=0.0,
-        notes=notes + ["Không có parser template khả dụng: trả unknown để abstain."],
-    )
-
-
-def parse_with_llm(question_text, as_of, calendar, rulebook, products, customers, groups=None, payments=None, backend=None, template_parse_fn=None) -> ParseResult:
-    """Parse một câu hỏi bằng mô hình cục bộ, repair tối đa 2 lần, rồi fallback.
+def parse_with_llm(question_text, as_of, calendar, rulebook, products, customers, groups=None, payments=None, backend=None) -> ParseResult:
+    """Parse một câu hỏi bằng mô hình, repair tối đa 2 lần, KHÔNG fallback template.
 
     Đầu vào:
         question_text: câu hỏi gốc.
         as_of: ngày "hôm nay" của câu hỏi (datetime.date).
-        calendar: lịch của split (để tra Tết ở tầng template fallback)
+        calendar: lịch của split (để tra Tết ở tóm tắt rulebook)
             hoặc None.
-        rulebook: rulebook của split đang chạy (để tóm tắt vào prompt
-            và để template fallback dùng) hoặc None.
+        rulebook: rulebook của split đang chạy (để tóm tắt vào prompt)
+            hoặc None.
         products/customers: danh sách thực thể của shop (để đưa vào
             prompt và để kiểm chứng thực thể).
         groups/payments: danh sách nhóm / hình thức thanh toán của
             shop, có thể None (khi None, prompt ghi "Không có").
-        backend: một LocalModelBackend (thường là TransformersBackend),
-            hoặc None (khi đó đi thẳng fallback, không giả vờ có model).
-        template_parse_fn: hàm parser template (thường là
-            phase2.parse_question) để fallback, hoặc None (khi đó hàm
-            tự thử nạp parse_question của phase2, nếu vẫn không có thì
-            trả unknown).
+        backend: một backend mô hình (thường là TransformersBackend
+            hoặc backend OpenAI ở tầng phát triển).
 
     Đầu ra:
         ParseResult theo hợp đồng: source 'llm' khi JSON đầu hợp lệ,
-        'repair' khi JSON hợp lệ sau repair, 'template_fallback' khi
-        đã fallback. confidence là confidence_parse của kết quả cuối
-        (với fallback là confidence của template). normalized_text của
-        kết quả LLM/repair luôn được ghi đè bằng câu chuẩn hoá thật từ
+        'repair' khi JSON hợp lệ sau repair. confidence là
+        confidence_parse của kết quả cuối. normalized_text của kết
+        quả LLM/repair luôn được ghi đè bằng câu chuẩn hoá thật từ
         expand_abbreviations, để truy vết không phụ thuộc vào những gì
         mô hình tự ghi.
 
-    Các bước và trường hợp biên:
-        1. Không có backend -> fallback ngay, không gọi model ảo.
-        2. Backend raise (thiếu gói/weights/lỗi sinh) -> ghi lỗi, fallback.
+    Các bước và trường hợp biên (KHÔNG có fallback template, theo
+    yêu cầu của người dùng ngày 2026-10-31: fallback template dựa
+    trên cụm từ của train nên rất hên xui trên test có cách hỏi và
+    định dạng khác, vì vậy không được dùng nó để đoán parse):
+        1. Không có backend -> raise RuntimeError ngay, không giả vờ
+           có mô hình, không fallback.
+        2. Backend raise (thiếu gói/weights/lỗi sinh) -> raise ngay,
+           không retry vô hạn.
         3. JSON sai schema/kỳ/thực thể -> repair tối đa 2 lần, mỗi lần
            gửi repair prompt liệt kê lỗi; lần repair thành công thì
            source='repair'.
-        4. Sau 2 lần repair vẫn sai -> fallback, KHÔNG đoán thêm.
-        5. Template fallback crash hoặc không có -> trả unknown để
-           abstain, KHÔNG crash cả pipeline vì một câu hỏi.
+        4. Sau 2 lần repair vẫn sai -> raise ValueError với toàn bộ
+           lỗi đã thu thập, KHÔNG đoán thêm, KHÔNG fallback.
+        5. Caller (runner) bắt lỗi ở trên và chuyển câu đó thành
+           abstain, không crash cả shop, không bịa đáp án.
         6. Mọi nhánh đều không bao giờ tự điền thực thể hay kỳ: trường
            nào không kiểm chứng được thì hoặc repair (để mô hình sửa),
-           hoặc fallback, hoặc unknown.
+           hoặc raise để abstain.
     """
     normalized_text = _phase2_expand(question_text)
     rulebook_summary = summarize_rulebook(rulebook, calendar)
@@ -1546,31 +1493,11 @@ def parse_with_llm(question_text, as_of, calendar, rulebook, products, customers
         rulebook_summary,
     )
     if backend is None:
-        fallback_notes = ["Không có backend LLM: đi thẳng fallback về parser template."]
-        if template_parse_fn is not None:
-            try:
-                parsed = template_parse_fn(
-                    question_text, as_of, calendar, rulebook, products, customers
-                )
-                return ParseResult(
-                    parsed=parsed,
-                    source="template_fallback",
-                    confidence=float(getattr(parsed, "confidence_parse", 0.0) or 0.0),
-                    notes=fallback_notes + ["Fallback về parser template."]
-                    + list(getattr(parsed, "parse_notes", []) or []),
-                )
-            except Exception as exc:
-                return ParseResult(
-                    parsed=_unknown_parsed(normalized_text),
-                    source="template_fallback",
-                    confidence=0.0,
-                    notes=fallback_notes + [f"Parser template cũng lỗi: {exc}."],
-                )
-        return _fallback_result(
-            question_text, as_of, calendar, rulebook, products, customers,
-            normalized_text, fallback_notes,
-        )
-
+        # Không có backend LLM: raise để caller chuyển thành abstain.
+        # KHÔNG fallback về parser template (xem docstring ở trên).
+        raise RuntimeError(
+            "Không có backend LLM: không fallback về parser template, "
+            "câu này sẽ abstain.")
     errors: list[str] = []
     current_prompt = prompt
     raw_output = None
@@ -1578,8 +1505,9 @@ def parse_with_llm(question_text, as_of, calendar, rulebook, products, customers
         try:
             raw_output = backend.generate_json(current_prompt, PARSED_QUESTION_JSON_SCHEMA)
         except Exception as exc:
-            errors.append(f"Lỗi backend ở lần thứ {attempt + 1}: {exc}.")
-            break
+            # Backend lỗi: raise ngay để caller abstain, không fallback.
+            raise RuntimeError(
+                f"Lỗi backend ở lần thứ {attempt + 1}: {exc}.") from exc
         try:
             parsed = validate_and_build(raw_output, products, customers)
         except ValueError as exc:
@@ -1605,28 +1533,8 @@ def parse_with_llm(question_text, as_of, calendar, rulebook, products, customers
             notes=notes,
         )
 
-    # Hết repair hoặc backend lỗi: fallback, không đoán thêm.
-    fallback_notes = ["LLM không trả được JSON hợp lệ sau tối đa 2 lần repair: " + " ".join(errors)]
-    if template_parse_fn is not None:
-        try:
-            parsed = template_parse_fn(
-                question_text, as_of, calendar, rulebook, products, customers
-            )
-            return ParseResult(
-                parsed=parsed,
-                source="template_fallback",
-                confidence=float(getattr(parsed, "confidence_parse", 0.0) or 0.0),
-                notes=fallback_notes + ["Fallback về parser template."]
-                + list(getattr(parsed, "parse_notes", []) or []),
-            )
-        except Exception as exc:
-            return ParseResult(
-                parsed=_unknown_parsed(normalized_text),
-                source="template_fallback",
-                confidence=0.0,
-                notes=fallback_notes + [f"Parser template cũng lỗi: {exc}."],
-            )
-    return _fallback_result(
-        question_text, as_of, calendar, rulebook, products, customers,
-        normalized_text, fallback_notes,
-    )
+    # Hết repair vẫn sai: raise để caller abstain, KHÔNG fallback
+    # template, KHÔNG đoán thêm.
+    raise ValueError(
+        "LLM không trả được JSON hợp lệ sau tối đa 2 lần repair: "
+        + " ".join(errors))

@@ -4,8 +4,9 @@
 Mục đích của file này
 ---------------------
 Chứng minh runner ``run_phase2_llm.py`` chạy được end-to-end mà không
-crash, không sửa ``solver.py``/``shop_view.py`` của phase2, và fallback
-về parser template khi backend LLM lỗi hoặc chưa có. Các test chỉ chạy
+crash, không sửa ``solver.py``/``shop_view.py`` của phase2, và abstain
+khi backend LLM lỗi hoặc chưa có (KHÔNG fallback về parser template,
+theo yêu cầu của người dùng ngày 2026-10-31). Các test chỉ chạy
 trên shop ``biz_101`` (shop CSV nhỏ, 40 câu) và giới hạn số câu, để
 chạy nhanh mà vẫn đi qua đúng luồng: cache -> view -> parse -> solver
 -> gate -> ghi submission tăng dần -> chấm bằng phase1 evaluate.
@@ -135,9 +136,9 @@ class TestRunnerLimit(unittest.TestCase):
                 entry = json.loads(line)
                 self.assertIn("id", entry)
                 self.assertIn("type", entry)
-            if runner.BACKEND_KIND == "template_fallback_tam_thoi":
+            if runner.BACKEND_KIND == "llm_only_no_backend":
                 self.assertEqual(
-                    summary["parse_sources"].get("template_fallback", 0), 20)
+                    summary["parse_sources"].get("llm_error", 0), 20)
             else:
                 self.assertEqual(
                     sum(summary["parse_sources"].values()), 20)
@@ -173,8 +174,12 @@ class TestRunnerLimit(unittest.TestCase):
                 parsed = template_parse(
                     question_text, as_of, calendar, rulebook,
                     products or [], customers or [])
+                # Lưu ý: đây là parse_fn tiêm riêng cho test (dùng
+                # template của phase2 để tạo parsed mẫu cho nhanh),
+                # KHÔNG phải fallback sản phẩm — đường suy luận mặc
+                # định của runner không còn gọi template nữa.
                 return runner.ParseResult(
-                    parsed=parsed, source="template_fallback",
+                    parsed=parsed, source="llm",
                     confidence=float(parsed.confidence_parse or 0.0),
                     notes=["test chậm để kiểm tra ghi tăng dần"])
 
@@ -234,16 +239,17 @@ class TestRunnerLimit(unittest.TestCase):
             self.assertEqual(len(lines), 20)
 
 
-class TestFallback(unittest.TestCase):
-    """Kiểm tra fallback khi backend LLM lỗi, không crash."""
+class TestLlmErrorAbstain(unittest.TestCase):
+    """Kiểm tra abstain khi backend LLM lỗi, không crash, không fallback template."""
 
-    def test_backend_loi_khong_crash_va_fallback_template(self):
-        """Hàm parse raise lỗi thì solve_one_question vẫn trả entry.
+    def test_backend_loi_khong_crash_va_abstain(self):
+        """Hàm parse raise lỗi thì solve_one_question vẫn trả entry abstain.
 
         Cách kiểm tra: lấy một câu hỏi thật của biz_101, tiêm hàm parse
         luôn raise ``RuntimeError`` (mô phỏng backend LLM hỏng), gọi
-        :func:`solve_one_question` và assert không raise, entry có id
-        đúng, và info ghi ``parse_source='template_fallback'``.
+        :func:`solve_one_question` và assert không raise, entry là
+        abstain với id đúng, và info ghi ``parse_source='llm_error'``
+        với ``error_group='parser'`` — KHÔNG fallback template.
         """
         with tempfile.TemporaryDirectory() as tmp:
             view, rulebook, calendar = _load_view_and_context(Path(tmp))
@@ -258,17 +264,17 @@ class TestFallback(unittest.TestCase):
             entry, info = runner.solve_one_question(
                 question, view, rulebook, calendar, parse_fn=broken_parse)
             self.assertEqual(entry["id"], str(question["id"]))
-            self.assertIn(entry["type"],
-                          ("abstain", "unanswerable", "number", "percent",
-                           "string", "date", "boolean", "list", "table"))
-            self.assertEqual(info["parse_source"], "template_fallback")
+            self.assertEqual(entry["type"], "abstain")
+            self.assertEqual(info["parse_source"], "llm_error")
+            self.assertEqual(info["error_group"], "parser")
 
-    def test_stub_backend_generate_raise_va_parse_fallback(self):
-        """Stub LocalModelBackend raise thì parse_with_llm vẫn fallback.
+    def test_stub_backend_generate_raise_va_parse_llm_error(self):
+        """Stub LocalModelBackend raise thì parse_with_llm trả llm_error.
 
         Cách kiểm tra: gọi :func:`parse_with_llm` với backend là stub
         (``generate`` luôn raise), assert kết quả có
-        ``source='template_fallback'`` và ``parsed`` không phải None.
+        ``source='llm_error'`` và ``parsed`` là None (để
+        solve_one_question abstain, không fallback template).
         """
         with tempfile.TemporaryDirectory() as tmp:
             view, rulebook, calendar = _load_view_and_context(Path(tmp))
@@ -279,15 +285,15 @@ class TestFallback(unittest.TestCase):
                 question["question"], datetime.date(2026, 1, 1),
                 calendar, rulebook, view.products, view.customers,
                 backend=runner.LocalModelBackend())
-            self.assertEqual(result.source, "template_fallback")
-            self.assertIsNotNone(result.parsed)
+            self.assertEqual(result.source, "llm_error")
+            self.assertIsNone(result.parsed)
 
     def test_validate_and_build_loai_json_sai(self):
         """JSON LLM sai measure hoặc bịa thực thể thì validate trả None.
 
         Cách kiểm tra: truyền JSON có measure lạ và JSON có entity_key
         không nằm trong shop, cả hai đều phải trả ``None`` để caller
-        rơi về template, không được dựng ParsedQuestion từ dữ liệu lạ.
+        abstain câu đó, không được dựng ParsedQuestion từ dữ liệu lạ.
         """
         self.assertIsNone(runner.validate_and_build(
             {"measure": "measure_la_khong_co", "answer_type": "number"},

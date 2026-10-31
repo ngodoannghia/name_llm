@@ -208,7 +208,7 @@ class TestOpenAICallLogger(unittest.TestCase):
                      "question": "câu hỏi", "as_of_date": "2026-06-16"},
                     {"question_text": "câu hỏi", "as_of": "2026-06-16",
                      "products": [], "customers": [], "calls": [],
-                     "parse_source": "template_fallback", "parse_confidence": 0.5,
+                     "parse_source": "llm_error", "parse_confidence": 0.0,
                      "parse_notes": [], "parsed": None, "parse_ms": 1.0,
                      "parse_error": None},
                     {"id": "q_gia", "type": "abstain"}, None))

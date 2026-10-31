@@ -14,14 +14,16 @@ bất kỳ file nào trong ``phase2/``:
    theo mặc định, để không ingest lại vô ích), nếu miss thì ingest bằng
    phase1 (``load_shop``) + dựng view (``shop_view``) + lưu cache; giải
    mọi câu của shop đó rồi GIẢI PHÓNG view trước khi sang shop khác.
-3. Mỗi câu hỏi đi qua: parse bằng LLM (``parse_with_llm``) có fallback
-   về parser template, đánh dấu nguồn parse (``source``) -> solver
+3. Mỗi câu hỏi đi qua: parse bằng LLM DUY NHẤT (``parse_with_llm``,
+   KHÔNG fallback về parser template — theo yêu cầu của người dùng
+   ngày 2026-10-31, vì fallback template dựa trên cụm từ của train
+   nên rất hên xui trên test; LLM lỗi thì câu đó thành abstain),
+   đánh dấu nguồn parse (``source``) -> solver
    (``solve``, không sửa) -> gate (``compute_confidence`` làm trần rồi
    ``decide`` áp ngưỡng 0,65 + kiểm tra unanswerable + format, không
    sửa logic gate; chỉ truyền confidence đã hiệu chỉnh, lấy
    ``min(confidence_solver, confidence_parse)`` làm trần như
-   ``run_phase2.py``, và nếu nguồn là ``template_fallback`` thì không
-   tăng confidence vượt quá confidence của template).
+   ``run_phase2.py``).
 4. Ghi submission TĂNG DẦN (mỗi câu ghi ngay, flush ngay) để crash giữa
    chừng vẫn còn đáp án đã giải.
 5. Chấm bằng phase1 ``evaluate.score_submission`` và ghi
@@ -37,14 +39,14 @@ sửa runner khi module đó xuất hiện:
   dùng ``parse_with_llm`` thật của module đó (và truyền ``backend``
   qua cho module đó nếu caller có truyền backend, vì backend thật dùng
   ``generate_json`` chứ không dùng ``generate`` của stub).
-- Nếu module đó chưa có hoặc import lỗi, runner KHÔNG crash mà dùng
-  bản fallback tạm thời ngay trong file này: ``parse_with_llm`` gọi
-  parser template của phase2 và đóng gói kết quả thành ``ParseResult``
-  với ``source='template_fallback'``.
+- Nếu module đó chưa có hoặc import lỗi, runner KHÔNG crash mà
+  ``parse_with_llm`` trả ``ParseResult`` rỗng với
+  ``source='llm_error'`` để ``solve_one_question`` chuyển câu đó
+  thành abstain, KHÔNG dùng parser template làm fallback.
 - QUAN TRỌNG: chỉ riêng việc module ``llm_parser`` tồn tại KHÔNG có
   nghĩa là câu hỏi đã do LLM parse. Module thật, khi không được truyền
-  backend mô hình (không có weights/transformers), sẽ tự rơi về
-  template với ``source='template_fallback'`` theo thiết kế của nó.
+  backend mô hình (không có weights/transformers), sẽ raise để
+  runner abstain câu đó.
   Vì vậy báo cáo phải căn cứ vào ``parse_sources`` (số câu từng nguồn)
   chứ không chỉ căn cứ vào trường ``backend``. KHÔNG gọi mạng/API
   thương mại nào trong runner này; mọi đường parse đều offline.
@@ -100,7 +102,6 @@ for _candidate in (str(_LLM_SRC), str(_PHASE2_SRC), str(_PHASE1_SRC)):
 from cache import load_shop_cache, save_shop_cache  # noqa: E402
 from gate import GATE_THRESHOLD, compute_confidence, decide  # noqa: E402
 from ingest import load_shop  # noqa: E402
-from parser import parse_question as parse_question_template  # noqa: E402
 from rulebook import load_calendar, load_rulebook  # noqa: E402
 from shop_view import build_shop_view  # noqa: E402
 from solver import solve  # noqa: E402
@@ -169,13 +170,13 @@ class ParseResult:
     - ``parsed``: ``ParsedQuestion`` theo API_CONTRACT mục 2 (của
       phase2, không định nghĩa lại ở đây để tránh xung đột kiểu).
     - ``source``: nguồn parse, một trong ``'llm'`` (parser LLM thật),
-      ``'template_fallback'`` (rơi về parser template vì LLM lỗi hoặc
-      chưa có), ``'llm_validated'`` (JSON của LLM đã qua
+      ``'llm_error'`` (LLM lỗi hoặc chưa có backend — câu đó abstain,
+      KHÔNG fallback template), ``'llm_validated'`` (JSON của LLM đã qua
       ``validate_and_build``). Runner ghi nguồn này vào báo cáo để
-      biết chính xác bao nhiêu câu do LLM parse, bao nhiêu câu do
-      fallback — không được ghi ``'llm'`` cho câu fallback.
+      biết chính xác bao nhiêu câu do LLM parse, bao nhiêu câu lỗi —
+      không được ghi ``'llm'`` cho câu lỗi.
     - ``confidence``: độ chắc của lần parse này, 0..1. Với fallback thì
-      bằng ``parsed.confidence_parse`` của template (không tăng thêm).
+      bằng 0.0.
     - ``notes``: ghi chú truy vết (vì sao fallback, vì sao không chắc).
 
     Tổng quát hoá: class này chỉ là vỏ bọc duck-typing; ``llm_parser``
@@ -185,7 +186,7 @@ class ParseResult:
     """
 
     parsed: object = None
-    source: str = "template_fallback"
+    source: str = "llm_error"
     confidence: float = 0.0
     notes: list = field(default_factory=list)
 
@@ -198,7 +199,7 @@ class LocalModelBackend:
     prompt. Vì mô hình thật chưa được bàn giao cho runner này, bản stub
     KHÔNG giả vờ sinh đáp án: :meth:`generate` luôn raise
     ``RuntimeError`` rõ ràng, và :func:`parse_with_llm` bắt lỗi đó để
-    rơi về parser template. Khi agent backend bàn giao backend thật
+    trả ``llm_error`` (câu đó abstain, không fallback template). Khi agent backend bàn giao backend thật
     (qua ``llm_parser``), class này không còn được dùng nữa.
 
     Đầu vào của constructor: ``model_path`` (đường dẫn mô hình, tùy
@@ -225,12 +226,12 @@ class LocalModelBackend:
         không dùng tới).
 
         Đầu ra: không bao giờ trả về (luôn raise ``RuntimeError``),
-        để :func:`parse_with_llm` rơi về fallback template một cách
+        để :func:`parse_with_llm` trả ``llm_error`` một cách
         tường minh thay vì dùng văn bản giả mạo làm đáp án LLM.
         """
         raise RuntimeError(
             "Backend LLM chưa được bàn giao (llm_parser chưa tồn tại); "
-            "runner sẽ fallback về parser template thay vì sinh văn bản giả."
+            "runner sẽ abstain câu này thay vì sinh văn bản giả."
         )
 
 
@@ -254,10 +255,10 @@ _REAL_PARSE_WITH_LLM = _try_import_real_llm_parser()
 
 #: Loại backend thực tế mà runner đang dùng trong lần chạy này:
 #: ``'llm_parser'`` khi module thật đã về và import được, ngược lại
-#: ``'template_fallback_tam_thoi'``. Giá trị này được ghi vào summary
+#: ``'llm_only_no_backend'``. Giá trị này được ghi vào summary
 #: và báo cáo để coordinator không nhầm fallback với LLM thật.
 BACKEND_KIND = "llm_parser" if _REAL_PARSE_WITH_LLM is not None \
-    else "template_fallback_tam_thoi"
+    else "llm_only_no_backend"
 
 
 def _adapt_parse_result(result, fallback_notes=None):
@@ -271,7 +272,8 @@ def _adapt_parse_result(result, fallback_notes=None):
 
     Đầu ra: ``ParseResult`` đã chuẩn hoá, hoặc ``None`` khi ``result``
     không chứa được ``ParsedQuestion`` nào dùng được (khi đó caller
-    phải fallback về template, không được đoán parse từ kết quả lạ).
+    phải abstain câu đó, không được đoán parse từ kết quả lạ,
+    không được fallback về template).
 
     Vì sao cần hàm này: runner không được ép kiểu kết quả của module
     khác (module đó có thể định nghĩa ``ParseResult`` riêng), nên chỉ
@@ -323,33 +325,6 @@ def _adapt_parse_result(result, fallback_notes=None):
     return None
 
 
-def _parse_with_template_fallback(question_text, as_of, calendar, rulebook,
-                                  products, customers, reason):
-    """Parse bằng parser template của phase2, đóng gói thành ``ParseResult``.
-
-    Đầu vào: giống :func:`parse_question` của phase2, cộng ``reason``
-    là lý do fallback (để ghi vào ``notes`` cho truy vết).
-
-    Đầu ra: ``ParseResult`` với ``source='template_fallback'`` và
-    ``confidence`` bằng đúng ``confidence_parse`` của template — không
-    tăng, không giảm thêm, vì fallback không được tự tin hơn chính
-    parser mà nó rơi về.
-    """
-    parsed = parse_question_template(
-        question_text, as_of, calendar, rulebook,
-        products or [], customers or [],
-    )
-    notes = [reason]
-    for note in getattr(parsed, "parse_notes", None) or []:
-        notes.append(str(note))
-    return ParseResult(
-        parsed=parsed,
-        source="template_fallback",
-        confidence=float(getattr(parsed, "confidence_parse", 0.0) or 0.0),
-        notes=notes,
-    )
-
-
 def build_prompt(question_text, products, customers):
     """Dựng prompt structured-output cho LLM từ câu hỏi và danh sách shop.
 
@@ -364,8 +339,7 @@ def build_prompt(question_text, products, customers):
         threshold, answer_type, confidence), kèm danh sách thực thể của
         shop để LLM khớp tên mà không bịa thực thể ngoài shop. Danh
         sách thực thể được cắt ở 100 mục mỗi loại để prompt không phình
-        vô hạn với shop lớn; việc cắt này chỉ ảnh hưởng prompt, không
-        ảnh hưởng fallback template (template vẫn thấy toàn bộ list).
+        vô hạn với shop lớn; việc cắt này chỉ ảnh hưởng prompt.
 
     Trường hợp biên: danh sách rỗng thì prompt ghi rõ shop không có
     thực thể loại đó, để LLM không bịa tên sản phẩm/khách.
@@ -418,8 +392,8 @@ def validate_and_build(raw_output, question_text, as_of, calendar, rulebook,
         ``ParsedQuestion`` đã kiểm chứng, hoặc ``None`` khi JSON sai
         schema (measure/answer_type ngoài tập hợp cho phép, ngày sai
         định dạng, thực thể không có trong shop, confidence ngoài
-        [0, 1]). Trả ``None`` thay vì raise, để caller rơi về template
-        một cách an toàn — một JSON LLM lỗi không được giết cả shop.
+        [0, 1]). Trả ``None`` thay vì raise, để caller abstain câu đó một cách
+        an toàn — một JSON LLM lỗi không được giết cả shop.
 
     Cách kiểm chứng (không đoán, không sửa lặng lẽ):
     - measure và answer_type phải nằm trong tập hợp của contract; nếu
@@ -541,7 +515,7 @@ def validate_and_build(raw_output, question_text, as_of, calendar, rulebook,
 
 def parse_with_llm(question_text, as_of, calendar, rulebook,
                    products, customers, backend=None):
-    """Parse một câu hỏi bằng LLM, lỗi thì fallback về parser template.
+    """Parse một câu hỏi bằng LLM DUY NHẤT, lỗi thì abstain, KHÔNG fallback template.
 
     Đầu vào: giống :func:`parse_question` của phase2, cộng ``backend``
     tùy chọn (backend mô hình cục bộ; khi module LLM thật về thì tham
@@ -550,27 +524,30 @@ def parse_with_llm(question_text, as_of, calendar, rulebook,
 
     Đầu ra:
         ``ParseResult`` với ``source='llm'`` (hoặc nguồn mà module thật
-        trả) khi LLM parse thành công, và ``source='template_fallback'``
-        khi: chưa có module LLM thật, module thật raise lỗi, module
-        thật trả kết quả không dùng được, hoặc backend được truyền vào
-        mà sinh lỗi. Không bao giờ raise chỉ vì LLM lỗi — một câu hỏi
-        lỗi parse vẫn phải đi qua solver/gate và được ghi submission
-        (thường là abstain), không được giết cả shop.
+        trả) khi LLM parse thành công, và ``source='llm_error'`` với
+        ``parsed=None`` khi: chưa có module LLM thật, module thật raise
+        lỗi, module thật trả kết quả không dùng được, hoặc backend được
+        truyền vào mà sinh lỗi. Không bao giờ raise chỉ vì LLM lỗi —
+        một câu hỏi lỗi parse sẽ được ``solve_one_question`` chuyển
+        thành abstain và ghi submission, không được giết cả shop, và
+        KHÔNG được đoán bằng parser template (theo yêu cầu của người
+        dùng ngày 2026-10-31).
 
     Thứ tự và lý do:
-    1. Nếu có module thật thì gọi nó trước (đúng interface đã thỏa
-       thuận: trả ``ParseResult`` với parsed/source/confidence/notes),
-       và truyền ``backend`` qua cho module đó (backend thật dùng
+    1. Nếu có module thật thì gọi nó (đúng interface đã thỏa thuận:
+       trả ``ParseResult`` với parsed/source/confidence/notes), và
+       truyền ``backend`` qua cho module đó (backend thật dùng
        ``generate_json``; runner không được tự gọi ``generate`` của
        backend thật rồi bỏ qua module, vì như vậy sẽ phá đường repair
        và validate của module đó).
-    2. Nếu không có module thật, hoặc module thật lỗi, thì gọi parser
-       template và đóng gói thành fallback — đồng thời ghi rõ lý do
-       vào ``notes`` để báo cáo phân biệt được LLM thật với fallback.
+    2. Nếu không có module thật, hoặc module thật lỗi, hoặc module
+       thật trả kết quả không dùng được, thì trả ``llm_error`` —
+       đồng thời ghi rõ lý do vào ``notes`` để báo cáo phân biệt
+       được LLM thật với lỗi LLM.
     3. Nếu không có module thật mà caller truyền ``backend`` (ví dụ
-       stub :class:`LocalModelBackend` raise khi sinh), cũng rơi về
-       template theo cùng một đường, vì backend lỗi là lỗi của tầng
-       parse, không phải lỗi của đợt chạy.
+       stub :class:`LocalModelBackend` raise khi sinh), cũng trả
+       ``llm_error`` theo cùng một đường, vì backend lỗi là lỗi của
+       tầng parse, không phải lỗi của đợt chạy.
     """
     if _REAL_PARSE_WITH_LLM is not None:
         try:
@@ -584,35 +561,31 @@ def parse_with_llm(question_text, as_of, calendar, rulebook,
                     products or [], customers or [],
                 )
             adapted = _adapt_parse_result(raw)
-        except Exception as exc:  # noqa: BLE001 - LLM lỗi thì fallback
-            return _parse_with_template_fallback(
-                question_text, as_of, calendar, rulebook, products,
-                customers,
-                reason=f"llm_parser lỗi, fallback về template: {exc!r}",
+        except Exception as exc:  # noqa: BLE001 - LLM lỗi thì abstain
+            return ParseResult(
+                parsed=None, source="llm_error", confidence=0.0,
+                notes=[f"llm_parser lỗi, không fallback template, câu này abstain: {exc!r}"],
             )
         if adapted is not None and adapted.parsed is not None:
             return adapted
-        return _parse_with_template_fallback(
-            question_text, as_of, calendar, rulebook, products,
-            customers,
-            reason="llm_parser trả kết quả không dùng được, "
-            "fallback về template",
+        return ParseResult(
+            parsed=None, source="llm_error", confidence=0.0,
+            notes=["llm_parser trả kết quả không dùng được, "
+                   "không fallback template, câu này abstain"],
         )
     if backend is not None:
-        # Chỉ còn stub của runner: thử sinh qua backend, lỗi thì fallback.
+        # Chỉ còn stub của runner: thử sinh qua backend, lỗi thì abstain.
         try:
             backend.generate(build_prompt(question_text, products, customers))
-        except Exception as exc:  # noqa: BLE001 - backend lỗi thì fallback
-            return _parse_with_template_fallback(
-                question_text, as_of, calendar, rulebook, products,
-                customers,
-                reason=f"backend lỗi, fallback về template: {exc!r}",
+        except Exception as exc:  # noqa: BLE001 - backend lỗi thì abstain
+            return ParseResult(
+                parsed=None, source="llm_error", confidence=0.0,
+                notes=[f"backend lỗi, không fallback template, câu này abstain: {exc!r}"],
             )
-    return _parse_with_template_fallback(
-        question_text, as_of, calendar, rulebook, products,
-        customers,
-        reason="llm_parser chưa tồn tại (fallback tạm thời của runner), "
-        "dùng parser template của phase2",
+    return ParseResult(
+        parsed=None, source="llm_error", confidence=0.0,
+        notes=["llm_parser chưa tồn tại, không dùng parser template, "
+               "câu này abstain"],
     )
 
 
@@ -763,7 +736,7 @@ def sanitize_entry(entry):
 
 
 # ---------------------------------------------------------------------------
-# Giải một câu hỏi: parse LLM (fallback template) -> solver -> gate
+# Giải một câu hỏi: parse LLM DUY NHẤT -> solver -> gate (KHÔNG fallback template)
 # ---------------------------------------------------------------------------
 
 
@@ -777,25 +750,27 @@ def solve_one_question(question, view, rulebook, calendar, parse_fn=None):
         calendar: calendar của split đang chạy.
         parse_fn: hàm parse tùy chọn, chữ ký như :func:`parse_with_llm`
             (``None`` thì dùng :func:`parse_with_llm` mặc định). Tham số
-            này phục vụ kiểm thử (tiêm backend lỗi để kiểm tra fallback)
+            này phục vụ kiểm thử (tiêm backend lỗi để kiểm tra abstain)
             và để coordinator tiêm parser LLM thật mà không sửa runner.
 
     Đầu ra:
         Tuple ``(entry, info)`` trong đó entry là dict submission đã
         điền id thật, còn info là dict gồm ``measure``, ``status``,
         ``error_group``, ``confidence``, ``as_of_fallback``,
-        ``parse_source`` (``'llm'`` hay ``'template_fallback'``) và
-        ``parse_confidence`` (độ chắc parse sau hiệu chỉnh).
+        ``parse_source`` (``'llm'``, ``'repair'`` hay ``'llm_error'``)
+        và ``parse_confidence`` (độ chắc parse sau hiệu chỉnh).
 
     Thứ tự và lý do từng bước (không được đảo, giống run_phase2.py):
 
-    1. Parser: LLM parse trước, lỗi thì fallback template; nguồn parse
-       được ghi lại. Confidence parse được HIỆU CHỈNH trước khi đưa vào
-       solver/gate: lấy ``min(confidence_parse của ParsedQuestion,
-       confidence của ParseResult)`` — với fallback thì hai giá trị này
-       bằng nhau nên không tăng vượt quá confidence của template; với
-       LLM thì trần này chặn trường hợp ParsedQuestion tự tin 1,0
-       nhưng ParseResult chỉ chắc 0,7.
+    1. Parser: LLM parse DUY NHẤT; lỗi parse hoặc kết quả không dùng
+       được thì câu đó thành abstain ngay với
+       ``error_group='parser'`` và ``parse_source='llm_error'``,
+       KHÔNG fallback về parser template (theo yêu cầu của người dùng
+       ngày 2026-10-31). Confidence parse được HIỆU CHỈNH trước khi
+       đưa vào solver/gate: lấy ``min(confidence_parse của
+       ParsedQuestion, confidence của ParseResult)`` — trần này chặn
+       trường hợp ParsedQuestion tự tin 1,0 nhưng ParseResult chỉ
+       chắc 0,7.
     2. Solver: tính đáp án bằng code, entry lúc này có ``id=None``.
     3. Gate: ``compute_confidence`` tính confidence theo bằng chứng và
        dùng làm TRẦN cho confidence của solver (lấy min), vì ``decide``
@@ -809,7 +784,8 @@ def solve_one_question(question, view, rulebook, calendar, parse_fn=None):
     Trường hợp biên: mọi ngoại lệ trong một câu hỏi đều được bắt thành
     abstain với ``error_group='filter'`` và ghi rõ lỗi, để một câu lỗi
     không giết cả shop. Riêng ngoại lệ ở tầng parse thì được bắt sớm
-    hơn (rơi về template) trước khi tới lớp bắt tổng này.
+    hơn (abstain với ``error_group='parser'``) trước khi tới lớp bắt
+    tổng này.
     """
     question_id = str(question["id"])
     parse_callable = parse_fn if parse_fn is not None else parse_with_llm
@@ -822,23 +798,38 @@ def solve_one_question(question, view, rulebook, calendar, parse_fn=None):
                 getattr(view, "customers", []) or [],
             )
             adapted = _adapt_parse_result(raw_result)
-        except Exception as exc:  # noqa: BLE001 - parse lỗi thì fallback
-            adapted = _parse_with_template_fallback(
-                question.get("question", ""), as_of, calendar, rulebook,
-                getattr(view, "products", []) or [],
-                getattr(view, "customers", []) or [],
-                reason=f"hàm parse lỗi, fallback về template: {exc!r}",
+        except Exception as exc:  # noqa: BLE001 - parse lỗi thì abstain
+            return (
+                {"id": question_id, "type": "abstain"},
+                {
+                    "measure": "unknown",
+                    "status": "abstain",
+                    "error_group": "parser",
+                    "confidence": 0.0,
+                    "as_of_fallback": as_of_fallback,
+                    "parse_source": "llm_error",
+                    "parse_confidence": 0.0,
+                    "parse_error": repr(exc),
+                },
             )
         if adapted is None or adapted.parsed is None:
-            adapted = _parse_with_template_fallback(
-                question.get("question", ""), as_of, calendar, rulebook,
-                getattr(view, "products", []) or [],
-                getattr(view, "customers", []) or [],
-                reason="hàm parse trả kết quả không dùng được, "
-                "fallback về template",
+            # Kết quả parse không dùng được: abstain, KHÔNG fallback
+            # template (theo yêu cầu của người dùng ngày 2026-10-31).
+            return (
+                {"id": question_id, "type": "abstain"},
+                {
+                    "measure": "unknown",
+                    "status": "abstain",
+                    "error_group": "parser",
+                    "confidence": 0.0,
+                    "as_of_fallback": as_of_fallback,
+                    "parse_source": "llm_error",
+                    "parse_confidence": 0.0,
+                    "parse_error": "hàm parse trả kết quả không dùng được",
+                },
             )
         parsed = adapted.parsed
-        parse_source = adapted.source or "template_fallback"
+        parse_source = adapted.source or "llm_error"
         # Hiệu chỉnh confidence parse (xem docstring bước 1): lấy min
         # của confidence_parse gốc và confidence của ParseResult, rồi
         # ghi lại vào một bản sao của ParsedQuestion để gate nhìn thấy
@@ -850,14 +841,6 @@ def solve_one_question(question, view, rulebook, calendar, parse_fn=None):
                              float(adapted.confidence))
         else:
             calibrated = float(original_confidence)
-        if parse_source == "template_fallback":
-            # Ràng buộc bổ sung theo nhiệm vụ: fallback không được tăng
-            # confidence vượt quá confidence của template. Vì
-            # _parse_with_template_fallback đã đặt confidence bằng đúng
-            # confidence_parse của template nên min ở trên đã bảo đảm
-            # điều này; dòng gán dưới đây chỉ làm ràng buộc tường minh
-            # và chống trường hợp ParseResult lạ mang confidence cao hơn.
-            calibrated = min(calibrated, float(original_confidence))
         try:
             parsed = dataclasses.replace(
                 parsed, confidence_parse=float(calibrated))
@@ -919,7 +902,7 @@ def solve_one_question(question, view, rulebook, calendar, parse_fn=None):
                 "error_group": "filter",
                 "confidence": 0.0,
                 "as_of_fallback": False,
-                "parse_source": "template_fallback",
+                "parse_source": "llm_error",
                 "parse_confidence": 0.0,
                 "runner_error": repr(exc),
             },
@@ -1083,7 +1066,7 @@ def run_phase2_llm(train_dir, cache_dir, output_path, shops=None,
                         "error_group": "filter",
                         "confidence": 0.0,
                         "as_of_fallback": False,
-                        "parse_source": "template_fallback",
+                        "parse_source": "llm_error",
                         "parse_confidence": 0.0,
                         "runner_error": repr(exc),
                     }
@@ -1120,11 +1103,13 @@ def run_phase2_llm(train_dir, cache_dir, output_path, shops=None,
         "backend_note": (
             "Module llm_parser đã được nạp; nguồn parse thực tế xem "
             "parse_sources (nếu không có backend model được cấu hình, "
-            "llm_parser tự fallback về template theo thiết kế của nó)."
+            "câu hỏi sẽ abstain với parse_source='llm_error', không "
+            "fallback template)."
             if BACKEND_KIND == "llm_parser"
-            else "FALLBACK TẠM THỜI CỦA RUNNER: llm_parser chưa tồn tại "
-            "khi chạy, runner dùng parser template của phase2; không "
-            "phải LLM thật, không gọi API thương mại."
+            else "LLM-ONLY, CHƯA CÓ BACKEND: llm_parser chưa tồn tại "
+            "khi chạy, câu hỏi sẽ abstain với parse_source='llm_error'; "
+            "không dùng parser template, không phải LLM thật, không gọi "
+            "API thương mại."
         ),
         "total_questions": len(questions),
         "written": written,
@@ -1134,7 +1119,7 @@ def run_phase2_llm(train_dir, cache_dir, output_path, shops=None,
         "run_seconds": round(time.perf_counter() - run_started, 3),
         "status_counts": dict(Counter(info["status"] for _qid, _biz, _e, info in per_question)),
         "parse_sources": dict(Counter(
-            info.get("parse_source", "template_fallback")
+            info.get("parse_source", "llm_error")
             for _qid, _biz, _e, info in per_question)),
         "coverage": {},
         "score": None,

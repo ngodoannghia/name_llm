@@ -146,36 +146,6 @@ class StubBackend(LocalModelBackend):
         return item
 
 
-def _fake_template(question_text, as_of, calendar, rulebook, products, customers):
-    """Parser template giả cho fallback: trả doanh thu tháng 7/2025, confidence 0.8.
-
-    Đầu vào: đúng chữ ký của phase2.parse_question.
-    Đầu ra: ParsedQuestion mẫu, để test khẳng định fallback đã dùng
-        đúng kết quả template (confidence 0.8, source template_fallback)
-        thay vì dùng JSON sai của mô hình.
-    """
-    return ParsedQuestion(
-        measure="revenue",
-        entity_kind="none",
-        entity_key=None,
-        entity_display=None,
-        period_start=datetime.date(2025, 7, 1),
-        period_end=datetime.date(2025, 7, 31),
-        period_kind="absolute",
-        period_months=[],
-        ranking_k=None,
-        ranking_target="none",
-        ranking_metric=None,
-        unit=None,
-        threshold_money=None,
-        threshold_op=None,
-        answer_type="number",
-        confidence_parse=0.8,
-        parse_notes=["template gia"],
-        normalized_text="doanh thu thang 7/2025 la bao nhieu",
-    )
-
-
 class TestValidateAndBuild(unittest.TestCase):
     """Kiểm tra validate_and_build: đúng thì xây, sai thì raise ValueError."""
 
@@ -279,14 +249,14 @@ class TestValidateAndBuild(unittest.TestCase):
 
 
 class TestParseWithLlm(unittest.TestCase):
-    """Kiểm tra parse_with_llm: llm, repair, fallback, không crash."""
+    """Kiểm tra parse_with_llm: llm, repair, lỗi thì raise để abstain (KHÔNG fallback template)."""
 
     def test_llm_dung_ngay_lan_dau_thi_source_llm(self):
         """JSON đúng ngay lần đầu thì source='llm', confidence của mô hình."""
         backend = StubBackend([_valid_json()])
         result = parse_with_llm(
             "doanh thu thang 7/2025 la bao nhieu", _AS_OF, None, None,
-            _PRODUCTS, _CUSTOMERS, backend=backend, template_parse_fn=_fake_template,
+            _PRODUCTS, _CUSTOMERS, backend=backend,
         )
         self.assertEqual(result.source, "llm")
         self.assertEqual(result.parsed.measure, "revenue")
@@ -301,7 +271,7 @@ class TestParseWithLlm(unittest.TestCase):
         ])
         result = parse_with_llm(
             "doanh thu thang 7/2025 la bao nhieu", _AS_OF, None, None,
-            _PRODUCTS, _CUSTOMERS, backend=backend, template_parse_fn=_fake_template,
+            _PRODUCTS, _CUSTOMERS, backend=backend,
         )
         self.assertEqual(result.source, "repair")
         self.assertEqual(result.parsed.measure, "revenue")
@@ -309,81 +279,57 @@ class TestParseWithLlm(unittest.TestCase):
         # Repair prompt phải liệt kê lỗi của lần đầu.
         self.assertIn("sai_ngoai_enum", backend.prompts[1])
 
-    def test_json_sai_mai_thi_fallback_khong_crash(self):
-        """Sai cả lần đầu + 2 lần repair thì fallback template, không crash, đúng 3 lần gọi."""
+    def test_json_sai_mai_thi_raise_khong_fallback(self):
+        """Sai cả lần đầu + 2 lần repair thì raise ValueError, đúng 3 lần gọi, KHÔNG fallback template."""
         backend = StubBackend([_valid_json(measure="sai_ngoai_enum")])
-        result = parse_with_llm(
-            "doanh thu thang 7/2025 la bao nhieu", _AS_OF, None, None,
-            _PRODUCTS, _CUSTOMERS, backend=backend, template_parse_fn=_fake_template,
-        )
-        self.assertEqual(result.source, "template_fallback")
-        self.assertEqual(result.parsed.measure, "revenue")
-        self.assertAlmostEqual(result.confidence, 0.8)
+        with self.assertRaises(ValueError):
+            parse_with_llm(
+                "doanh thu thang 7/2025 la bao nhieu", _AS_OF, None, None,
+                _PRODUCTS, _CUSTOMERS, backend=backend,
+            )
         self.assertEqual(backend.calls, 3)
 
-    def test_thuc_the_khong_ton_tai_thi_fallback_khong_doan(self):
-        """Mô hình bịa thực thể ở mọi lần repair thì fallback, kết quả không chứa tên bịa."""
+    def test_thuc_the_khong_ton_tai_thi_raise_khong_doan(self):
+        """Mô hình bịa thực thể ở mọi lần repair thì raise, không đoán, không fallback."""
         data = _valid_json(
             entity_kind="product",
             entity_key="san pham bia",
             entity_display="Sản phẩm bịa",
         )
         backend = StubBackend([data])
-        result = parse_with_llm(
-            "doanh thu san pham bia thang 7/2025", _AS_OF, None, None,
-            _PRODUCTS, _CUSTOMERS, backend=backend, template_parse_fn=_fake_template,
-        )
-        self.assertEqual(result.source, "template_fallback")
-        self.assertNotEqual(result.parsed.entity_key, "san pham bia")
-        self.assertNotEqual(result.parsed.entity_display, "Sản phẩm bịa")
+        with self.assertRaises(ValueError):
+            parse_with_llm(
+                "doanh thu san pham bia thang 7/2025", _AS_OF, None, None,
+                _PRODUCTS, _CUSTOMERS, backend=backend,
+            )
 
-    def test_ky_khong_hop_le_thi_fallback(self):
-        """Kỳ sai (tháng 13 trong multi_month) ở mọi lần thì fallback, không crash."""
+    def test_ky_khong_hop_le_thi_raise(self):
+        """Kỳ sai (tháng 13 trong multi_month) ở mọi lần thì raise, không fallback, không crash."""
         data = _valid_json(period_kind="multi_month", period_months=[[2025, 13]])
         backend = StubBackend([data])
-        result = parse_with_llm(
-            "doanh thu 3 thang", _AS_OF, None, None,
-            _PRODUCTS, _CUSTOMERS, backend=backend, template_parse_fn=_fake_template,
-        )
-        self.assertEqual(result.source, "template_fallback")
+        with self.assertRaises(ValueError):
+            parse_with_llm(
+                "doanh thu 3 thang", _AS_OF, None, None,
+                _PRODUCTS, _CUSTOMERS, backend=backend,
+            )
 
-    def test_backend_loi_thi_fallback(self):
-        """Backend raise RuntimeError thì fallback ngay, không crash, không retry vô hạn."""
+    def test_backend_loi_thi_raise(self):
+        """Backend raise RuntimeError thì raise ngay, không retry vô hạn, không fallback."""
         backend = StubBackend([RuntimeError("không tải được model")])
-        result = parse_with_llm(
-            "doanh thu thang 7/2025", _AS_OF, None, None,
-            _PRODUCTS, _CUSTOMERS, backend=backend, template_parse_fn=_fake_template,
-        )
-        self.assertEqual(result.source, "template_fallback")
-        self.assertEqual(result.parsed.measure, "revenue")
+        with self.assertRaises(RuntimeError):
+            parse_with_llm(
+                "doanh thu thang 7/2025", _AS_OF, None, None,
+                _PRODUCTS, _CUSTOMERS, backend=backend,
+            )
         self.assertEqual(backend.calls, 1)
 
-    def test_khong_co_backend_thi_fallback(self):
-        """backend=None thì đi thẳng fallback, không giả vờ có mô hình."""
-        result = parse_with_llm(
-            "doanh thu thang 7/2025", _AS_OF, None, None,
-            _PRODUCTS, _CUSTOMERS, backend=None, template_parse_fn=_fake_template,
-        )
-        self.assertEqual(result.source, "template_fallback")
-        self.assertAlmostEqual(result.confidence, 0.8)
-
-    def test_khong_backend_khong_template_thi_unknown_khong_crash(self):
-        """Không backend, template thật cũng không dùng được thì trả unknown để abstain.
-
-        Lưu ý: ở môi trường này phase2 có sẵn nên _fallback_result sẽ thử
-        template thật; test này dùng template_parse_fn raise để mô phỏng
-        trường hợp template cũng hỏng, và khẳng định không crash.
-        """
-        def _broken_template(*args, **kwargs):
-            raise RuntimeError("template hỏng")
-
-        result = parse_with_llm(
-            "cau hoi la", _AS_OF, None, None,
-            _PRODUCTS, _CUSTOMERS, backend=None, template_parse_fn=_broken_template,
-        )
-        self.assertEqual(result.source, "template_fallback")
-        self.assertEqual(result.parsed.measure, "unknown")
-        self.assertEqual(result.confidence, 0.0)
+    def test_khong_co_backend_thi_raise(self):
+        """backend=None thì raise RuntimeError ngay, không giả vờ có mô hình, không fallback."""
+        with self.assertRaises(RuntimeError):
+            parse_with_llm(
+                "doanh thu thang 7/2025", _AS_OF, None, None,
+                _PRODUCTS, _CUSTOMERS, backend=None,
+            )
 
 
 class TestPromptAndBackend(unittest.TestCase):
