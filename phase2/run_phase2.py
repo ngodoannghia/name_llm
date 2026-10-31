@@ -164,8 +164,8 @@ def load_questions(questions_path):
             if not isinstance(record, dict) or not record.get("id") \
                     or not record.get("business_id"):
                 raise ValueError(
-                    f"Dong {line_number} trong {questions_path} thieu "
-                    "id hoac business_id, khong the chay pipeline.")
+                    f"Dòng {line_number} trong {questions_path} thiếu "
+                    "id hoặc business_id, không thể chạy pipeline.")
             questions.append(record)
     questions.sort(key=lambda q: (str(q["business_id"]), str(q["id"])))
     return questions
@@ -630,14 +630,14 @@ def main(argv=None):
         train_dir, cache_dir, output_path, shops=shops, limit=args.limit)
     score = summary.get("score") or {}
     print(
-        f"Done: {summary['written']}/{summary['total_questions']} cau, "
+        f"Done: {summary['written']}/{summary['total_questions']} câu, "
         f"PA={score.get('pa')}, correct={score.get('correct')}, "
         f"wrong={score.get('wrong')}, abstain={score.get('abstain')}, "
         f"holdout_pa={score.get('holdout_pa')}, "
         f"cache={summary['cache']}, "
-        f"thoi_gian={summary['run_seconds']}s")
+        f"thời_gian={summary['run_seconds']}s")
     if summary["shop_errors"]:
-        print(f"Shop loi (da bat, khong giet dot chay): {summary['shop_errors']}")
+        print(f"Shop lỗi (đã bắt, không giết đợt chạy): {summary['shop_errors']}")
     return 0
 
 

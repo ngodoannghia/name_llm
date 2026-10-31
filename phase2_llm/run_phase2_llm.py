@@ -229,8 +229,8 @@ class LocalModelBackend:
         tường minh thay vì dùng văn bản giả mạo làm đáp án LLM.
         """
         raise RuntimeError(
-            "Backend LLM chua duoc ban giao (llm_parser chua ton tai); "
-            "runner se fallback ve parser template thay vi sinh van ban gia."
+            "Backend LLM chưa được bàn giao (llm_parser chưa tồn tại); "
+            "runner sẽ fallback về parser template thay vì sinh văn bản giả."
         )
 
 
@@ -384,22 +384,22 @@ def build_prompt(question_text, products, customers):
     product_names = _names(products)
     customer_names = _names(customers)
     return (
-        "Ban la bo phan parse cau hoi cua he thong DataMate. "
-        "Chi tra JSON duy nhat, khong giai thich them, theo schema: "
-        '{"measure": str, "entity_kind": str, "entity_key": str hoac null, '
-        '"entity_display": str hoac null, "period_start": "YYYY-MM-DD" hoac null, '
-        '"period_end": "YYYY-MM-DD" hoac null, "period_kind": str, '
-        '"period_months": [[nam, thang], ...], "ranking_k": int hoac null, '
-        '"ranking_target": str, "unit": str hoac null, '
-        '"threshold_money": number hoac null, "threshold_op": str hoac null, '
+        "Bạn là bộ phận parse câu hỏi của hệ thống DataMate. "
+        "Chỉ trả JSON duy nhất, không giải thích thêm, theo schema: "
+        '{"measure": str, "entity_kind": str, "entity_key": str hoặc null, '
+        '"entity_display": str hoặc null, "period_start": "YYYY-MM-DD" hoặc null, '
+        '"period_end": "YYYY-MM-DD" hoặc null, "period_kind": str, '
+        '"period_months": [[năm, tháng], ...], "ranking_k": int hoặc null, '
+        '"ranking_target": str, "unit": str hoặc null, '
+        '"threshold_money": number hoặc null, "threshold_op": str hoặc null, '
         '"answer_type": str, "confidence_parse": number 0..1}. '
-        "Measure phai thuoc tap hop cua API_CONTRACT muc 2. "
-        "Chi chon entity_key trong danh sach cua shop duoi day, "
-        "khong bia thuc the ngoai shop; khong chac thi giam "
-        "confidence_parse thay vi doan. "
-        f"Cau hoi: {question_text}\n"
-        f"San pham cua shop: {product_names}\n"
-        f"Khach hang cua shop: {customer_names}\n"
+        "Measure phải thuộc tập hợp của API_CONTRACT mục 2. "
+        "Chỉ chọn entity_key trong danh sách của shop dưới đây, "
+        "không bịa thực thể ngoài shop; không chắc thì giảm "
+        "confidence_parse thay vì đoán. "
+        f"Câu hỏi: {question_text}\n"
+        f"Sản phẩm của shop: {product_names}\n"
+        f"Khách hàng của shop: {customer_names}\n"
     )
 
 
@@ -588,15 +588,15 @@ def parse_with_llm(question_text, as_of, calendar, rulebook,
             return _parse_with_template_fallback(
                 question_text, as_of, calendar, rulebook, products,
                 customers,
-                reason=f"llm_parser loi, fallback ve template: {exc!r}",
+                reason=f"llm_parser lỗi, fallback về template: {exc!r}",
             )
         if adapted is not None and adapted.parsed is not None:
             return adapted
         return _parse_with_template_fallback(
             question_text, as_of, calendar, rulebook, products,
             customers,
-            reason="llm_parser tra ket qua khong dung duoc, "
-            "fallback ve template",
+            reason="llm_parser trả kết quả không dùng được, "
+            "fallback về template",
         )
     if backend is not None:
         # Chỉ còn stub của runner: thử sinh qua backend, lỗi thì fallback.
@@ -606,13 +606,13 @@ def parse_with_llm(question_text, as_of, calendar, rulebook,
             return _parse_with_template_fallback(
                 question_text, as_of, calendar, rulebook, products,
                 customers,
-                reason=f"backend loi, fallback ve template: {exc!r}",
+                reason=f"backend lỗi, fallback về template: {exc!r}",
             )
     return _parse_with_template_fallback(
         question_text, as_of, calendar, rulebook, products,
         customers,
-        reason="llm_parser chua ton tai (fallback tam thoi cua runner), "
-        "dung parser template cua phase2",
+        reason="llm_parser chưa tồn tại (fallback tạm thời của runner), "
+        "dùng parser template của phase2",
     )
 
 
@@ -688,8 +688,8 @@ def load_questions(questions_path):
             if not isinstance(record, dict) or not record.get("id") \
                     or not record.get("business_id"):
                 raise ValueError(
-                    f"Dong {line_number} trong {questions_path} thieu "
-                    "id hoac business_id, khong the chay pipeline.")
+                    f"Dòng {line_number} trong {questions_path} thiếu "
+                    "id hoặc business_id, không thể chạy pipeline.")
             questions.append(record)
     questions.sort(key=lambda q: (str(q["business_id"]), str(q["id"])))
     return questions
@@ -827,15 +827,15 @@ def solve_one_question(question, view, rulebook, calendar, parse_fn=None):
                 question.get("question", ""), as_of, calendar, rulebook,
                 getattr(view, "products", []) or [],
                 getattr(view, "customers", []) or [],
-                reason=f"ham parse loi, fallback ve template: {exc!r}",
+                reason=f"hàm parse lỗi, fallback về template: {exc!r}",
             )
         if adapted is None or adapted.parsed is None:
             adapted = _parse_with_template_fallback(
                 question.get("question", ""), as_of, calendar, rulebook,
                 getattr(view, "products", []) or [],
                 getattr(view, "customers", []) or [],
-                reason="ham parse tra ket qua khong dung duoc, "
-                "fallback ve template",
+                reason="hàm parse trả kết quả không dùng được, "
+                "fallback về template",
             )
         parsed = adapted.parsed
         parse_source = adapted.source or "template_fallback"
@@ -1066,7 +1066,7 @@ def run_phase2_llm(train_dir, cache_dir, output_path, shops=None,
                         try:
                             on_question(
                                 question, entry, info, question_seconds)
-                        except Exception:  # noqa: BLE001 - log loi thi bo qua
+                        except Exception:  # noqa: BLE001 - log lỗi thì bỏ qua
                             pass
             except Exception as exc:  # noqa: BLE001 - bắt tổng theo shop
                 shop_errors.setdefault(business_id, []).append(repr(exc))
@@ -1094,7 +1094,7 @@ def run_phase2_llm(train_dir, cache_dir, output_path, shops=None,
                     if on_question is not None:
                         try:
                             on_question(question, entry, shop_error_info, 0.0)
-                        except Exception:  # noqa: BLE001 - log loi thi bo qua
+                        except Exception:  # noqa: BLE001 - log lỗi thì bỏ qua
                             pass
             finally:
                 # Giải phóng view trước khi sang shop khác (contract).
@@ -1111,20 +1111,20 @@ def run_phase2_llm(train_dir, cache_dir, output_path, shops=None,
                             business_id, len(shop_questions), cache_hit,
                             shop_timings[business_id]["seconds"],
                             list(shop_errors.get(business_id, [])))
-                    except Exception:  # noqa: BLE001 - log loi thi bo qua
+                    except Exception:  # noqa: BLE001 - log lỗi thì bỏ qua
                         pass
 
     # Chấm bằng phase1 evaluate (chỉ khi có đáp án tham chiếu).
     summary = {
         "backend": BACKEND_KIND,
         "backend_note": (
-            "Module llm_parser da duoc nap; nguon parse thuc te xem "
-            "parse_sources (neu khong co backend model duoc cau hinh, "
-            "llm_parser tu fallback ve template theo thiet ke cua no)."
+            "Module llm_parser đã được nạp; nguồn parse thực tế xem "
+            "parse_sources (nếu không có backend model được cấu hình, "
+            "llm_parser tự fallback về template theo thiết kế của nó)."
             if BACKEND_KIND == "llm_parser"
-            else "FALLBACK TAM THOI CUA RUNNER: llm_parser chua ton tai "
-            "khi chay, runner dung parser template cua phase2; khong "
-            "phai LLM that, khong goi API thuong mai."
+            else "FALLBACK TẠM THỜI CỦA RUNNER: llm_parser chưa tồn tại "
+            "khi chạy, runner dùng parser template của phase2; không "
+            "phải LLM thật, không gọi API thương mại."
         ),
         "total_questions": len(questions),
         "written": written,
@@ -1282,16 +1282,16 @@ def main(argv=None):
         train_dir, cache_dir, output_path, shops=shops, limit=args.limit)
     score = summary.get("score") or {}
     print(
-        f"Done: {summary['written']}/{summary['total_questions']} cau, "
+        f"Done: {summary['written']}/{summary['total_questions']} câu, "
         f"backend={summary['backend']}, "
         f"parse_sources={summary['parse_sources']}, "
         f"PA={score.get('pa')}, correct={score.get('correct')}, "
         f"wrong={score.get('wrong')}, abstain={score.get('abstain')}, "
         f"holdout_pa={score.get('holdout_pa')}, "
         f"cache={summary['cache']}, "
-        f"thoi_gian={summary['run_seconds']}s")
+        f"thời_gian={summary['run_seconds']}s")
     if summary["shop_errors"]:
-        print(f"Shop loi (da bat, khong giet dot chay): {summary['shop_errors']}")
+        print(f"Shop lỗi (đã bắt, không giết đợt chạy): {summary['shop_errors']}")
     return 0
 
 

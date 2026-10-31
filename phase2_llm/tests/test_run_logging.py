@@ -58,18 +58,18 @@ class TestConsoleLogger(unittest.TestCase):
             try:
                 # Dòng thường bị quiet chặn, dòng quan trọng vẫn ghi.
                 with mock.patch("sys.stdout", new_callable=io.StringIO):
-                    logger.log("dong thuong")
-                    logger.log("dong quan trong", important=True)
+                    logger.log("dòng thường")
+                    logger.log("dòng quan trọng", important=True)
             finally:
                 logger.close()
             content = log_path.read_text(encoding="utf-8")
-            self.assertNotIn("dong thuong", content)
-            self.assertIn("dong quan trong", content)
+            self.assertNotIn("dòng thường", content)
+            self.assertIn("dòng quan trọng", content)
 
     def test_log_without_file_does_not_crash(self):
         logger = ConsoleLogger(log_file=None, quiet=False)
         with mock.patch("sys.stdout", new_callable=io.StringIO):
-            logger.log("chi in console")
+            logger.log("chỉ in console")
         logger.close()
 
 
@@ -90,7 +90,7 @@ class TestLoggingBackend(unittest.TestCase):
 
     def test_failure_is_logged_and_reraised(self):
         logger = ConsoleLogger(log_file=None, quiet=False)
-        fake = _FakeBackend(fail_with=RuntimeError("OpenAI Responses API tra loi HTTP 401"))
+        fake = _FakeBackend(fail_with=RuntimeError("OpenAI Responses API trả lời HTTP 401"))
         wrapped = LoggingBackend(fake, logger)
         with mock.patch("sys.stdout", new_callable=io.StringIO) as captured:
             with self.assertRaises(RuntimeError):

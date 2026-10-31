@@ -249,16 +249,16 @@ class OpenAIConfig:
         )
         if not self.api_key:
             raise RuntimeError(
-                "Thieu OPENAI_API_KEY: hay dien key vao file phase2_llm/.env "
-                "(copy tu .env.example) hoac export OPENAI_API_KEY truoc khi "
-                "chay. Khong gui key qua chat va khong commit file .env."
+                "Thiếu OPENAI_API_KEY: hãy điền key vào file phase2_llm/.env "
+                "(copy từ .env.example) hoặc export OPENAI_API_KEY trước khi "
+                "chạy. Không gửi key qua chat và không commit file .env."
             )
 
     def __repr__(self):
         # Cố tình không in key: chỉ in model và base_url để debug an toàn.
         return (
             f"OpenAIConfig(model={self.model!r}, base_url={self.base_url!r}, "
-            f"api_key=***da cau hinh***)"
+            f"api_key=***đã cấu hình***)"
         )
 
 
@@ -338,8 +338,8 @@ class OpenAIResponsesBackend:
                         if isinstance(text, str) and text.strip():
                             return text
         raise RuntimeError(
-            "Phan hoi OpenAI khong chua van ban output_text; "
-            "khong the trich JSON ParsedQuestion."
+            "Phản hồi OpenAI không chứa văn bản output_text; "
+            "không thể trích JSON ParsedQuestion."
         )
 
     def generate_json(self, prompt, schema):
@@ -378,20 +378,20 @@ class OpenAIResponsesBackend:
             # retry vô hạn sẽ đốt quota và treo pipeline; caller fallback
             # về template là hành vi đúng theo hợp đồng.
             raise RuntimeError(
-                f"OpenAI Responses API tra loi HTTP {exc.code}; "
-                f"kiem tra lai OPENAI_API_KEY va OPENAI_MODEL "
+                f"OpenAI Responses API trả lời HTTP {exc.code}; "
+                f"kiểm tra lại OPENAI_API_KEY và OPENAI_MODEL "
                 f"({self.config.model})."
             ) from exc
         except Exception as exc:  # noqa: BLE001 - lỗi mạng/timeout đều fallback
             raise RuntimeError(
-                f"Khong goi duoc OpenAI Responses API ({type(exc).__name__}); "
-                f"kiem tra mang va OPENAI_BASE_URL ({self.config.base_url})."
+                f"Không gọi được OpenAI Responses API ({type(exc).__name__}); "
+                f"kiểm tra mạng và OPENAI_BASE_URL ({self.config.base_url})."
             ) from exc
         try:
             response = json.loads(raw.decode("utf-8"))
         except (ValueError, UnicodeDecodeError) as exc:
             raise RuntimeError(
-                "Phan hoi OpenAI khong phai JSON hop le; khong the trich "
+                "Phản hồi OpenAI không phải JSON hợp lệ; không thể trích "
                 "JSON ParsedQuestion."
             ) from exc
         text = self._extract_output_text(response)
@@ -399,13 +399,13 @@ class OpenAIResponsesBackend:
             parsed = json.loads(text)
         except ValueError as exc:
             raise RuntimeError(
-                "Van ban OpenAI tra ve khong phai JSON hop le "
-                f"(200 ky tu dau: {text[:200]!r}); "
-                "llm_parser se repair hoac fallback ve template."
+                "Văn bản OpenAI trả về không phải JSON hợp lệ "
+                f"(200 ký tự đầu: {text[:200]!r}); "
+                "llm_parser sẽ repair hoặc fallback về template."
             ) from exc
         if not isinstance(parsed, dict):
             raise RuntimeError(
-                "JSON OpenAI tra ve khong phai object (dict); "
-                "llm_parser se repair hoac fallback ve template."
+                "JSON OpenAI trả về không phải object (dict); "
+                "llm_parser sẽ repair hoặc fallback về template."
             )
         return parsed

@@ -543,15 +543,15 @@ def _format_sample_rows(sample_rows, headers):
     """
     rows = sample_rows
     if rows is None:
-        return "Khong co dong mau."
+        return "Không có dòng mẫu."
     # DataFrame: lấy 10 dòng đầu, chuyển thành list dict.
     if hasattr(rows, "to_dict") and hasattr(rows, "columns"):
         try:
             rows = rows.head(MAX_SAMPLE_ROWS).to_dict("records")
         except Exception:
-            return "Khong co dong mau."
+            return "Không có dòng mẫu."
     if not rows:
-        return "Khong co dong mau."
+        return "Không có dòng mẫu."
     lines = []
     for row in list(rows)[:MAX_SAMPLE_ROWS]:
         if isinstance(row, dict):
@@ -574,7 +574,7 @@ def _format_sample_rows(sample_rows, headers):
             lines.append(", ".join(parts))
         else:
             lines.append(_stringify_value(row))
-    return "\n".join(lines) if lines else "Khong co dong mau."
+    return "\n".join(lines) if lines else "Không có dòng mẫu."
 
 
 def _format_headers(headers):
@@ -589,7 +589,7 @@ def _format_headers(headers):
         không có thông tin tên cột để dựa vào.
     """
     if not headers:
-        return "Khong co header."
+        return "Không có header."
     return ", ".join(str(h) for h in headers)
 
 
@@ -844,11 +844,11 @@ def _coerce_confidence(value, errors, field_name="confidence"):
         return 0.0
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         errors.append(
-            f"{field_name} phai la so 0..1, nhan duoc {value!r}."
+            f"{field_name} phải là số 0..1, nhận được {value!r}."
         )
         return None
     if value < 0 or value > 1:
-        errors.append(f"{field_name} {value} nam ngoai khoang 0..1.")
+        errors.append(f"{field_name} {value} nằm ngoài khoảng 0..1.")
         return None
     return float(value)
 
@@ -871,7 +871,7 @@ def _coerce_string_list(value, errors, field_name):
     if value is None:
         return []
     if not isinstance(value, list):
-        errors.append(f"{field_name} phai la list chuoi, nhan duoc {type(value).__name__}.")
+        errors.append(f"{field_name} phải là list chuỗi, nhận được {type(value).__name__}.")
         return []
     return [item if isinstance(item, str) else str(item) for item in value]
 
@@ -906,13 +906,13 @@ def _build_repair_prompt(original_prompt, errors, previous_output):
     error_lines = "\n".join(f"- {error}" for error in errors)
     return (
         f"{original_prompt}\n\n"
-        "JSON ban tra truoc do SAI va can sua lai. Cac loi cu the:\n"
+        "JSON bạn trả trước đó SAI và cần sửa lại. Các lỗi cụ thể:\n"
         f"{error_lines}\n\n"
-        f"JSON cu:\n{previous_text}\n\n"
-        "Hay tra DUY NHAT object JSON da sua het cac loi tren, theo dung schema, "
-        "khong giai thich, khong bia ten cot hay vai tro moi de lap cho trong, "
-        "khong tinh toan so lieu. Neu mot truong khong xac dinh duoc, hay dung "
-        "'other'/null/list rong va ghi vao notes."
+        f"JSON cũ:\n{previous_text}\n\n"
+        "Hãy trả DUY NHẤT object JSON đã sửa hết các lỗi trên, theo đúng schema, "
+        "không giải thích, không bịa tên cột hay vai trò mới để lấp chỗ trống, "
+        "không tính toán số liệu. Nếu một trường không xác định được, hãy dùng "
+        "'other'/null/list rỗng và ghi vào notes."
     )
 
 
@@ -942,13 +942,13 @@ def _call_with_repair(backend, prompt, schema, validate_fn):
         một gợi ý sai.
     """
     if backend is None:
-        return (None, ["Khong co backend LLM (backend=None), fallback rule-based."], "fallback")
+        return (None, ["Không có backend LLM (backend=None), fallback rule-based."], "fallback")
     try:
         data = backend.generate_json(prompt, schema)
     except Exception as exc:
-        return (None, [f"Backend LLM loi: {exc}"], "fallback")
+        return (None, [f"Backend LLM lỗi: {exc}"], "fallback")
     if not isinstance(data, dict):
-        return (None, ["Backend LLM tra ve JSON khong phai object."], "fallback")
+        return (None, ["Backend LLM trả về JSON không phải object."], "fallback")
     result, errors = validate_fn(data)
     if result is not None:
         return (result, [], "llm")
@@ -959,9 +959,9 @@ def _call_with_repair(backend, prompt, schema, validate_fn):
         try:
             data = backend.generate_json(repair_prompt, schema)
         except Exception as exc:
-            return (None, [f"Backend LLM loi khi repair: {exc}"], "fallback")
+            return (None, [f"Backend LLM lỗi khi repair: {exc}"], "fallback")
         if not isinstance(data, dict):
-            return (None, ["Backend LLM tra ve JSON khong phai object khi repair."], "fallback")
+            return (None, ["Backend LLM trả về JSON không phải object khi repair."], "fallback")
         result, errors = validate_fn(data)
         if result is not None:
             return (result, [], "repair")
@@ -1084,25 +1084,25 @@ class TransformersBackend(LocalModelBackend):
             return
         if not self.model_id:
             raise RuntimeError(
-                "TransformersBackend chua co model_id: model mac dinh CHUA duoc chon "
-                "va CHUA duoc kiem chung. Hay chon mot model public <= 15B, phat hanh "
-                "truoc 01/10/2026, co licence cho phep, roi truyen model_id vao day "
-                "truoc khi dong Docker. Khong tu chon model thay nguoi tich hop."
+                "TransformersBackend chưa có model_id: model mặc định CHƯA được chọn "
+                "và CHƯA được kiểm chứng. Hãy chọn một model public <= 15B, phát hành "
+                "trước 01/10/2026, có licence cho phép, rồi truyền model_id vào đây "
+                "trước khi đóng Docker. Không tự chọn model thay người tích hợp."
             )
         try:
             import transformers  # noqa: F401  (chỉ kiểm tra gói có sẵn không)
         except ImportError as exc:
             raise RuntimeError(
-                "TransformersBackend khong kha dung: thieu goi 'transformers'. "
-                "Hay cai transformers (va torch) trong moi truong Docker roi thu lai; "
-                "khong tra JSON gia khi backend khong co that."
+                "TransformersBackend không khả dụng: thiếu gói 'transformers'. "
+                "Hãy cài transformers (và torch) trong môi trường Docker rồi thử lại; "
+                "không trả JSON giả khi backend không có thật."
             ) from exc
         try:
             import torch
             from transformers import AutoModelForCausalLM, AutoTokenizer
         except ImportError as exc:
             raise RuntimeError(
-                "TransformersBackend khong kha dung: thieu 'torch' hoac lop Auto "
+                "TransformersBackend không khả dụng: thiếu 'torch' hoặc lớp Auto "
                 "cua transformers. Hay cai day du torch + transformers roi thu lai."
             ) from exc
         try:
@@ -1126,9 +1126,9 @@ class TransformersBackend(LocalModelBackend):
             self._model.eval()
         except Exception as exc:
             raise RuntimeError(
-                f"TransformersBackend khong tai duoc model '{self.model_id}': {exc}. "
-                "Co the weights chua co san, sai model_id, hoac thieu bo nho. "
-                "Khong tra JSON gia khi model khong tai duoc."
+                f"TransformersBackend không tải được model '{self.model_id}': {exc}. "
+                "Có thể weights chưa có sẵn, sai model_id, hoặc thiếu bộ nhớ. "
+                "Không trả JSON giả khi model không tải được."
             ) from exc
         self._loaded = True
 
@@ -1153,10 +1153,10 @@ class TransformersBackend(LocalModelBackend):
         đóng object ngoài cùng.
         """
         if not text:
-            raise RuntimeError("Model tra ve text rong, khong co JSON.")
+            raise RuntimeError("Model trả về text rỗng, không có JSON.")
         start = text.find("{")
         if start < 0:
-            raise RuntimeError("Output cua model khong chua object JSON.")
+            raise RuntimeError("Output của model không chứa object JSON.")
         depth = 0
         in_string = False
         escaped = False
@@ -1181,12 +1181,12 @@ class TransformersBackend(LocalModelBackend):
                         parsed = json.loads(text[start:index + 1])
                     except json.JSONDecodeError as exc:
                         raise RuntimeError(
-                            f"Khong parse duoc JSON tu output cua model: {exc}"
+                            f"Không parse được JSON từ output của model: {exc}"
                         ) from exc
                     if not isinstance(parsed, dict):
-                        raise RuntimeError("JSON cua model khong phai object.")
+                        raise RuntimeError("JSON của model không phải object.")
                     return parsed
-        raise RuntimeError("Output cua model co dau '{' mo nhung khong dong du.")
+        raise RuntimeError("Output của model có dấu '{' mở nhưng không đóng đủ.")
 
     def generate_json(self, prompt: str, schema: dict) -> dict:
         """Sinh JSON theo schema bằng model transformers cục bộ.
@@ -1267,29 +1267,29 @@ def build_table_prompt(table_name, headers, sample_rows, readme_text) -> str:
     """
     readme_part = _truncate_readme(readme_text)
     if not readme_part:
-        readme_part = "(Khong co README.)"
+        readme_part = "(Không có README.)"
     schema_text = json.dumps(TABLE_CLASSIFICATION_JSON_SCHEMA, ensure_ascii=False)
     roles_text = ", ".join(TABLE_ROLES)
     return (
-        "Ban la bo phan phan loai bang cua he thong DataMate. "
-        "Nhiem vu DUY NHAT cua ban la doc ten bang, header va cac dong mau "
-        "duoi day, roi tra ve MOT object JSON theo dung schema, khong giai thich, "
-        "khong tinh toan so lieu, khong them text ngoai JSON.\n\n"
-        f"Ten bang: {table_name}\n"
+        "Bạn là bộ phận phân loại bảng của hệ thống DataMate. "
+        "Nhiệm vụ DUY NHẤT của bạn là đọc tên bảng, header và các dòng mẫu "
+        "dưới đây, rồi trả về MỘT object JSON theo đúng schema, không giải thích, "
+        "không tính toán số liệu, không thêm text ngoài JSON.\n\n"
+        f"Tên bảng: {table_name}\n"
         f"Header: {_format_headers(headers)}\n"
-        f"Cac dong mau (toi da 10 dong, gia tri dang chuoi):\n{_format_sample_rows(sample_rows, headers)}\n\n"
-        f"README cua shop (cat toi da 4000 ky tu dau):\n{readme_part}\n\n"
-        f"Schema JSON (tra dung cac truong nay):\n{schema_text}\n\n"
-        "Quy tac bat buoc:\n"
-        f"- table_role chi duoc lay trong enum: {roles_text}. "
-        "Khong duoc tu them vai tro moi.\n"
-        "- confidence la so 0..1, chi do chac cua viec phan loai.\n"
-        "- evidence la list chuoi ngan neu bang chung: ten bang, header, mau gia tri.\n"
-        "- DU LIEU THAT THANG README: neu README noi bang nay la mot loai bang "
-        "nhung header/mau gia tri khong co cot tuong ung (vi du noi la don hang "
-        "nhung khong co ma don/ngay/trang thai), hay chon vai tro theo du lieu that "
-        "hoac 'other', va ghi ro vao notes, khong duoc ghi de bang README.\n"
-        "- Chi tra DUY NHAT object JSON, khong giai thich, khong tinh so.\n"
+        f"Các dòng mẫu (tối đa 10 dòng, giá trị dạng chuỗi):\n{_format_sample_rows(sample_rows, headers)}\n\n"
+        f"README của shop (cắt tối đa 4000 ký tự đầu):\n{readme_part}\n\n"
+        f"Schema JSON (trả đúng các trường này):\n{schema_text}\n\n"
+        "Quy tắc bắt buộc:\n"
+        f"- table_role chỉ được lấy trong enum: {roles_text}. "
+        "Không được tự thêm vai trò mới.\n"
+        "- confidence là số 0..1, chỉ độ chắc của việc phân loại.\n"
+        "- evidence là list chuỗi ngắn nêu bằng chứng: tên bảng, header, mẫu giá trị.\n"
+        "- DỮ LIỆU THẬT THẮNG README: nếu README nói bảng này là một loại bảng "
+        "nhưng header/mẫu giá trị không có cột tương ứng (ví dụ nói là đơn hàng "
+        "nhưng không có mã đơn/ngày/trạng thái), hãy chọn vai trò theo dữ liệu thật "
+        "hoặc 'other', và ghi rõ vào notes, không được ghi đè bằng README.\n"
+        "- Chỉ trả DUY NHẤT object JSON, không giải thích, không tính số.\n"
     )
 
 
@@ -1322,33 +1322,33 @@ def build_mapping_prompt(table_name, headers, sample_rows, readme_text, unmapped
     """
     readme_part = _truncate_readme(readme_text)
     if not readme_part:
-        readme_part = "(Khong co README.)"
+        readme_part = "(Không có README.)"
     if unmapped_semantics:
         semantics_text = ", ".join(str(s) for s in unmapped_semantics)
     else:
-        semantics_text = "(Khong co semantic can map.)"
+        semantics_text = "(Không có semantic cần map.)"
     schema_text = json.dumps(COLUMN_MAPPING_JSON_SCHEMA, ensure_ascii=False)
     return (
-        "Ban la bo phan map cot cua he thong DataMate. "
-        "Nhiem vu DUY NHAT cua ban la doc ten bang, header va cac dong mau "
-        "duoi day, roi tra ve MOT object JSON theo dung schema, khong giai thich, "
-        "khong tinh toan so lieu, khong them text ngoai JSON.\n\n"
-        f"Ten bang: {table_name}\n"
-        f"Header (CHI duoc chon cot trong danh sach nay, khong duoc bia ten cot moi): {_format_headers(headers)}\n"
-        f"Cac dong mau (toi da 10 dong, gia tri dang chuoi):\n{_format_sample_rows(sample_rows, headers)}\n\n"
-        f"README cua shop (cat toi da 4000 ky tu dau):\n{readme_part}\n\n"
-        f"Cac semantic CAN MAP (chi map cac semantic nay, khong map semantic khac): {semantics_text}\n\n"
-        f"Schema JSON (tra dung cac truong nay):\n{schema_text}\n\n"
-        "Quy tac bat buoc:\n"
-        "- mapping la dict semantic -> ten cot THAT, ten cot phai ton tai dung trong header tren. "
-        "Cot khong co trong header thi khong duoc dua vao mapping.\n"
-        "- semantic chi duoc lay trong danh sach CAN MAP tren (mot tap con cua 37 semantic cua hop dong).\n"
-        "- Khong duoc bia he so quy doi, khong duoc bia trang thai don, khong duoc tu parse tien/ngay/so luong thanh so. "
-        "Ban chi chon ten cot; viec parse so lieu do code dam nhan sau do.\n"
-        "- confidence la so 0..1, chi do chac cua viec map cot.\n"
-        "- evidence la list chuoi ngan neu bang chung: ten cot, mau gia tri.\n"
-        "- Neu mot semantic khong xac dinh duoc cot phu hop: bo qua semantic do, khong duoc doan cot de lap cho trong.\n"
-        "- Chi tra DUY NHAT object JSON, khong giai thich, khong tinh so.\n"
+        "Bạn là bộ phận map cột của hệ thống DataMate. "
+        "Nhiệm vụ DUY NHẤT của bạn là đọc tên bảng, header và các dòng mẫu "
+        "dưới đây, rồi trả về MỘT object JSON theo đúng schema, không giải thích, "
+        "không tính toán số liệu, không thêm text ngoài JSON.\n\n"
+        f"Tên bảng: {table_name}\n"
+        f"Header (CHỈ được chọn cột trong danh sách này, không được bịa tên cột mới): {_format_headers(headers)}\n"
+        f"Các dòng mẫu (tối đa 10 dòng, giá trị dạng chuỗi):\n{_format_sample_rows(sample_rows, headers)}\n\n"
+        f"README của shop (cắt tối đa 4000 ký tự đầu):\n{readme_part}\n\n"
+        f"Các semantic CẦN MAP (chỉ map các semantic này, không map semantic khác): {semantics_text}\n\n"
+        f"Schema JSON (trả đúng các trường này):\n{schema_text}\n\n"
+        "Quy tắc bắt buộc:\n"
+        "- mapping là dict semantic -> tên cột THẬT, tên cột phải tồn tại đúng trong header trên. "
+        "Cột không có trong header thì không được đưa vào mapping.\n"
+        "- semantic chỉ được lấy trong danh sách CẦN MAP trên (một tập con của 37 semantic của hợp đồng).\n"
+        "- Không được bịa hệ số quy đổi, không được bịa trạng thái đơn, không được tự parse tiền/ngày/số lượng thành số. "
+        "Bạn chỉ chọn tên cột; việc parse số liệu do code đảm nhận sau đó.\n"
+        "- confidence là số 0..1, chỉ độ chắc của việc map cột.\n"
+        "- evidence là list chuỗi ngắn nêu bằng chứng: tên cột, mẫu giá trị.\n"
+        "- Nếu một semantic không xác định được cột phù hợp: bỏ qua semantic đó, không được đoán cột để lấp chỗ trống.\n"
+        "- Chỉ trả DUY NHẤT object JSON, không giải thích, không tính số.\n"
     )
 
 
@@ -1378,29 +1378,29 @@ def build_readme_prompt(readme_text, table_names) -> str:
     """
     readme_part = _truncate_readme(readme_text)
     if not readme_part:
-        readme_part = "(Khong co README.)"
+        readme_part = "(Không có README.)"
     if table_names:
         tables_text = ", ".join(str(t) for t in table_names)
     else:
-        tables_text = "(Khong co bang.)"
+        tables_text = "(Không có bảng.)"
     schema_text = json.dumps(README_NOTES_JSON_SCHEMA, ensure_ascii=False)
     roles_text = ", ".join(TABLE_ROLES)
     return (
-        "Ban la bo phan doc README cua he thong DataMate. "
-        "Nhiem vu DUY NHAT cua ban la doc README duoi day, roi tra ve MOT object JSON "
-        "theo dung schema, khong giai thich, khong tinh toan so lieu, khong them text ngoai JSON.\n\n"
-        f"README cua shop (cat toi da 4000 ky tu dau):\n{readme_part}\n\n"
-        f"Cac bang cua shop (chi gan vai tro cho cac bang nay, khong bia ten bang moi): {tables_text}\n\n"
-        f"Schema JSON (tra dung cac truong nay):\n{schema_text}\n\n"
-        "Quy tac bat buoc:\n"
-        f"- table_roles la dict ten bang -> vai tro, vai tro chi trong enum: {roles_text}.\n"
-        "- status_vocabulary la list cac trang thai don ma README nhac toi (chi la tu vung tham khao).\n"
-        "- unit_notes la list ghi chu ngan ve don vi trong README.\n"
-        "- date_notes la list ghi chu ngan ve quy uoc ngay trong README.\n"
-        "- conversion_table_location la ten bang chua bang quy doi theo README, hoac null neu README khong neu ro. "
-        "Chi neu TEN BANG, khong neu he so quy doi cu the (he so that phai doc tu du lieu bang do).\n"
-        "- Khong duoc bia he so quy doi, khong duoc bia trang thai don, khong duoc tu parse tien/ngay/so luong thanh so.\n"
-        "- Chi tra DUY NHAT object JSON, khong giai thich, khong tinh so.\n"
+        "Bạn là bộ phận đọc README của hệ thống DataMate. "
+        "Nhiệm vụ DUY NHẤT của bạn là đọc README dưới đây, rồi trả về MỘT object JSON "
+        "theo đúng schema, không giải thích, không tính toán số liệu, không thêm text ngoài JSON.\n\n"
+        f"README của shop (cắt tối đa 4000 ký tự đầu):\n{readme_part}\n\n"
+        f"Các bảng của shop (chỉ gắn vai trò cho các bảng này, không bịa tên bảng mới): {tables_text}\n\n"
+        f"Schema JSON (trả đúng các trường này):\n{schema_text}\n\n"
+        "Quy tắc bắt buộc:\n"
+        f"- table_roles là dict tên bảng -> vai trò, vai trò chỉ trong enum: {roles_text}.\n"
+        "- status_vocabulary là list các trạng thái đơn mà README nhắc tới (chỉ là từ vựng tham khảo).\n"
+        "- unit_notes là list ghi chú ngắn về đơn vị trong README.\n"
+        "- date_notes là list ghi chú ngắn về quy ước ngày trong README.\n"
+        "- conversion_table_location là tên bảng chứa bảng quy đổi theo README, hoặc null nếu README không nêu rõ. "
+        "Chỉ nêu TÊN BẢNG, không nêu hệ số quy đổi cụ thể (hệ số thật phải đọc từ dữ liệu bảng đó).\n"
+        "- Không được bịa hệ số quy đổi, không được bịa trạng thái đơn, không được tự parse tiền/ngày/số lượng thành số.\n"
+        "- Chỉ trả DUY NHẤT object JSON, không giải thích, không tính số.\n"
     )
 
 
@@ -1450,11 +1450,11 @@ def _validate_table_classification_detailed(data, table_name, headers):
     """
     errors = []
     if not isinstance(data, dict):
-        return (None, [f"JSON phan loai bang '{table_name}' khong phai object."])
+        return (None, [f"JSON phân loại bảng '{table_name}' không phải object."])
     role = data.get("table_role")
     if role not in TABLE_ROLES:
         errors.append(
-            f"table_role {role!r} khong nam trong enum TABLE_ROLES "
+            f"table_role {role!r} không nằm trong enum TABLE_ROLES "
             f"({', '.join(TABLE_ROLES)})."
         )
     confidence = _coerce_confidence(data.get("confidence"), errors)
@@ -1463,7 +1463,7 @@ def _validate_table_classification_detailed(data, table_name, headers):
     if errors or confidence is None:
         return (None, errors)
     if data.get("confidence") is None:
-        notes = notes + ["confidence vang mat, mac dinh 0.0 (khong phai do mo hinh bao)."]
+        notes = notes + ["confidence vắng mặt, mặc định 0.0 (không phải do mô hình báo)."]
     return (
         TableClassification(
             table_role=role,
@@ -1536,7 +1536,7 @@ def _validate_column_mapping_detailed(data, df_columns, df):
         return (
             {},
             [{"semantic": "", "column": "",
-              "reason": "JSON map cot khong phai object."}],
+              "reason": "JSON map cột không phải object."}],
             warnings,
         )
     mapping = data.get("mapping")
@@ -1544,19 +1544,19 @@ def _validate_column_mapping_detailed(data, df_columns, df):
         return (
             {},
             [{"semantic": "", "column": "",
-              "reason": "Truong 'mapping' vang mat hoac khong phai dict."}],
+              "reason": "Trường 'mapping' vắng mặt hoặc không phải dict."}],
             warnings,
         )
     columns_set = set(df_columns) if df_columns else set()
     if df is None:
         warnings.append(
-            "Khong co DataFrame de kiem chung mau gia tri, chi kiem tra ten cot."
+            "Không có DataFrame để kiểm chứng mẫu giá trị, chỉ kiểm tra tên cột."
         )
     if not _PHASE1_NORMALIZERS_AVAILABLE:
         warnings.append(
-            "normalizers phase1 khong nap duoc, chi kiem chung bang ten "
-            "(ban sao quy tac phase1 ve nguong 25%, khong phai ham parse that); "
-            "map tien/ngay/so luong chua duoc kiem chung mau that."
+            "normalizers phase1 không nạp được, chỉ kiểm chứng bằng tên "
+            "(bản sao quy tắc phase1 về ngưỡng 25%, không phải hàm parse thật); "
+            "map tiền/ngày/số lượng chưa được kiểm chứng mẫu thật."
         )
     # Sắp xếp semantic để thứ tự verified/rejected deterministic,
     # không phụ thuộc thứ tự key trong JSON của mô hình.
@@ -1567,8 +1567,8 @@ def _validate_column_mapping_detailed(data, df_columns, df):
                 "semantic": str(semantic),
                 "column": column if isinstance(column, str) else "",
                 "reason": (
-                    f"Semantic '{semantic}' ngoai 37 khoa cua hop dong, "
-                    "khong duoc map."
+                    f"Semantic '{semantic}' ngoài 37 khoá của hợp đồng, "
+                    "không được map."
                 ),
             })
             continue
@@ -1576,7 +1576,7 @@ def _validate_column_mapping_detailed(data, df_columns, df):
             rejected.append({
                 "semantic": semantic,
                 "column": "",
-                "reason": f"Ten cot goi y cho semantic '{semantic}' khong phai chuoi hop le.",
+                "reason": f"Tên cột gợi ý cho semantic '{semantic}' không phải chuỗi hợp lệ.",
             })
             continue
         if columns_set and column not in columns_set:
@@ -1584,8 +1584,8 @@ def _validate_column_mapping_detailed(data, df_columns, df):
                 "semantic": semantic,
                 "column": column,
                 "reason": (
-                    f"Cot '{column}' khong ton tai trong DataFrame cua bang, "
-                    "loai ngay, khong doan cot khac thay the."
+                    f"Cột '{column}' không tồn tại trong DataFrame của bảng, "
+                    "loại ngay, không đoán cột khác thay thế."
                 ),
             })
             continue
@@ -1599,8 +1599,8 @@ def _validate_column_mapping_detailed(data, df_columns, df):
                     "semantic": semantic,
                     "column": column,
                     "reason": (
-                        f"Cot '{column}' khong ton tai trong DataFrame cua bang, "
-                        "loai ngay, khong doan cot khac thay the."
+                        f"Cột '{column}' không tồn tại trong DataFrame của bảng, "
+                        "loại ngay, không đoán cột khác thay thế."
                     ),
                 })
                 continue
@@ -1610,9 +1610,9 @@ def _validate_column_mapping_detailed(data, df_columns, df):
                 "semantic": semantic,
                 "column": column,
                 "reason": (
-                    f"Cot '{column}' cho semantic '{semantic}' chi co "
-                    f"{rate:.0%} mau khong trong parse duoc bang normalizers "
-                    "phase1, duoi nguong 25% cua hop dong."
+                    f"Cột '{column}' cho semantic '{semantic}' chỉ có "
+                    f"{rate:.0%} mẫu không trống parse được bằng normalizers "
+                    "phase1, dưới ngưỡng 25% của hợp đồng."
                 ),
             })
             continue
@@ -1653,13 +1653,13 @@ def _validate_readme_notes_detailed(data):
     """
     errors = []
     if not isinstance(data, dict):
-        return (None, ["JSON tom tat README khong phai object."])
+        return (None, ["JSON tóm tắt README không phải object."])
     table_roles_raw = data.get("table_roles")
     table_roles = {}
     if table_roles_raw is None:
         table_roles = {}
     elif not isinstance(table_roles_raw, dict):
-        errors.append("table_roles phai la dict ten bang -> vai tro.")
+        errors.append("table_roles phải là dict tên bảng -> vai trò.")
     else:
         for table_name in sorted(table_roles_raw):
             role = table_roles_raw[table_name]
@@ -1667,7 +1667,7 @@ def _validate_readme_notes_detailed(data):
                 table_roles[str(table_name)] = role
             else:
                 errors.append(
-                    f"table_roles['{table_name}'] = {role!r} ngoai enum TABLE_ROLES, loai muc nay."
+                    f"table_roles['{table_name}'] = {role!r} ngoài enum TABLE_ROLES, loại mục này."
                 )
     status_vocabulary = _coerce_string_list(
         data.get("status_vocabulary"), errors, "status_vocabulary"
@@ -1677,8 +1677,8 @@ def _validate_readme_notes_detailed(data):
     location = data.get("conversion_table_location")
     if location is not None and not isinstance(location, str):
         errors.append(
-            "conversion_table_location phai la chuoi ten bang hoac null, "
-            f"nhan duoc {type(location).__name__}."
+            "conversion_table_location phải là chuỗi tên bảng hoặc null, "
+            f"nhận được {type(location).__name__}."
         )
         location = None
     if errors:
@@ -1848,7 +1848,7 @@ def _classify_table_detailed(table_name, headers, sample_rows, readme_text, back
         backend, prompt, TABLE_CLASSIFICATION_JSON_SCHEMA, _validate
     )
     if result is None:
-        notes = ["Fallback rule-based: khong co phan loai LLM hop le."] + errors
+        notes = ["Fallback rule-based: không có phân loại LLM hợp lệ."] + errors
         return (
             TableClassification(table_role="other", confidence=0.0,
                                 evidence=[], notes=notes),
@@ -1857,9 +1857,9 @@ def _classify_table_detailed(table_name, headers, sample_rows, readme_text, back
         )
     if not _headers_have_role_evidence(headers, result.table_role):
         notes = list(result.notes) + [
-            "Du lieu that thang README: header khong co cot tuong ung "
-            f"(ma don/ngay/trang thai hoac cot dac trung) cho vai tro "
-            f"'{result.table_role}', ha xuong 'other'."
+            "Dữ liệu thật thắng README: header không có cột tương ứng "
+            f"(mã đơn/ngày/trạng thái hoặc cột đặc trưng) cho vai trò "
+            f"'{result.table_role}', hạ xuống 'other'."
         ]
         result = TableClassification(
             table_role="other",
@@ -1938,7 +1938,7 @@ def _suggest_mapping_detailed(table_name, df, readme_text, unmapped_semantics, b
         ``rejected_mappings`` cho báo cáo truy vết được.
     """
     if df is None:
-        return ({}, [], ["Khong co DataFrame cho bang, khong goi y map."], "fallback")
+        return ({}, [], ["Không có DataFrame cho bảng, không gợi ý map."], "fallback")
     try:
         headers = [str(c) for c in df.columns]
     except Exception:
@@ -1964,18 +1964,18 @@ def _suggest_mapping_detailed(table_name, df, readme_text, unmapped_semantics, b
         # (trả verified, kể cả khi verified rỗng vì mẫu yếu), và
         # rejected được giữ lại; ngược lại thì trả lỗi để repair.
         if not isinstance(data, dict) or not isinstance(data.get("mapping"), dict):
-            return (None, ["Truong 'mapping' vang mat hoac khong phai dict."])
+            return (None, ["Trường 'mapping' vắng mặt hoặc không phải dict."])
         schema_errors = []
         for semantic in sorted(data["mapping"]):
             column = data["mapping"][semantic]
             if semantic not in SEMANTIC_KEYS:
                 schema_errors.append(
-                    f"Semantic '{semantic}' ngoai 37 khoa cua hop dong."
+                    f"Semantic '{semantic}' ngoài 37 khoá của hợp đồng."
                 )
             elif not isinstance(column, str) or column not in headers:
                 schema_errors.append(
-                    f"Cot goi y '{column}' cho semantic '{semantic}' "
-                    "khong ton tai trong header cua bang."
+                    f"Cột gợi ý '{column}' cho semantic '{semantic}' "
+                    "không tồn tại trong header của bảng."
                 )
         if schema_errors:
             return (None, schema_errors)
@@ -2134,15 +2134,15 @@ def run_llm_ingest_for_shop(shop_result, readme_text, backend=None) -> LlmIngest
     table_names = sorted(str(name) for name in tables)
     if not _PHASE1_INGEST_AVAILABLE:
         result.warnings.append(
-            "map_columns phase1 khong nap duoc, coi moi semantic la chua map "
-            "va chi goi y LLM cho cac semantic con trong theo dinh nghia nay."
+            "map_columns phase1 không nạp được, coi mọi semantic là chưa map "
+            "và chỉ gợi ý LLM cho các semantic còn trống theo định nghĩa này."
         )
     if readme_text:
         readme_notes = summarize_readme(readme_text, table_names, backend)
         if readme_notes is None and backend is not None:
             result.warnings.append(
-                "Tom tat README bang LLM that bai hoac JSON sai sau repair, "
-                "readme_notes la None (fallback)."
+                "Tóm tắt README bằng LLM thất bại hoặc JSON sai sau repair, "
+                "readme_notes là None (fallback)."
             )
         result.readme_notes = readme_notes
     else:
@@ -2154,7 +2154,7 @@ def run_llm_ingest_for_shop(shop_result, readme_text, backend=None) -> LlmIngest
             headers = [str(c) for c in df.columns]
         except Exception:
             result.warnings.append(
-                f"Bang '{table_name}' khong co columns hop le, bo qua bang nay."
+                f"Bảng '{table_name}' không có columns hợp lệ, bỏ qua bảng này."
             )
             continue
         sample_rows = _sample_rows_from_df(df, headers)
@@ -2170,8 +2170,8 @@ def run_llm_ingest_for_shop(shop_result, readme_text, backend=None) -> LlmIngest
             except Exception as exc:
                 rule_map = {}
                 result.warnings.append(
-                    f"map_columns phase1 loi o bang '{table_name}': {exc}, "
-                    "coi moi semantic la chua map."
+                    f"map_columns phase1 lỗi ở bảng '{table_name}': {exc}, "
+                    "coi mọi semantic là chưa map."
                 )
         else:
             rule_map = {}

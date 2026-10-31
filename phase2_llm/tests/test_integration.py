@@ -170,7 +170,7 @@ class TestRunnerLimit(unittest.TestCase):
                 return runner.ParseResult(
                     parsed=parsed, source="template_fallback",
                     confidence=float(parsed.confidence_parse or 0.0),
-                    notes=["test cham de kiem tra ghi tang dan"])
+                    notes=["test chậm để kiểm tra ghi tăng dần"])
 
             errors = []
 
@@ -247,7 +247,7 @@ class TestFallback(unittest.TestCase):
 
             def broken_parse(*_args, **_kwargs):
                 """Hàm parse giả lập backend hỏng, luôn raise lỗi."""
-                raise RuntimeError("backend LLM gia lap bi hong")
+                raise RuntimeError("backend LLM giả lập bị hỏng")
 
             entry, info = runner.solve_one_question(
                 question, view, rulebook, calendar, parse_fn=broken_parse)
@@ -342,7 +342,7 @@ class TestDocstringTiengViet(unittest.TestCase):
                             msg=f"Docstring rong: {name}")
             self.assertTrue(
                 any(char in _VIETNAMESE_CHARS for char in docstring),
-                msg=f"Docstring khong phai tieng Viet: {name}")
+                msg=f"Docstring không phải tiếng Việt: {name}")
 
         _assert_docstring(tree, "module run_phase2_llm")
         for node in tree.body:

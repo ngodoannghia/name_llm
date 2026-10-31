@@ -173,22 +173,22 @@ class LoggingBackend:
         call_no = self.calls
         started = time.perf_counter()
         self._logger.log(
-            f"[LLM CALL #{call_no}] bat dau goi API "
-            f"(prompt {len(prompt)} ky tu, schema {len(schema)} keys)")
+            f"[LLM CALL #{call_no}] bắt đầu gọi API "
+            f"(prompt {len(prompt)} ký tự, schema {len(schema)} keys)")
         try:
             result = self._backend.generate_json(prompt, schema)
-        except Exception as exc:  # noqa: BLE001 - log roi raise lai nguyen ven
+        except Exception as exc:  # noqa: BLE001 - log rồi raise lại nguyên vẹn
             self.failures += 1
             elapsed_ms = (time.perf_counter() - started) * 1000
             self._logger.log(
-                f"[LLM ERROR #{call_no}] goi API that bai sau {elapsed_ms:.0f}ms: "
+                f"[LLM ERROR #{call_no}] gọi API thất bại sau {elapsed_ms:.0f}ms: "
                 f"{_short(exc, 500)}",
                 important=True)
             raise
         elapsed_ms = (time.perf_counter() - started) * 1000
         self._logger.log(
-            f"[LLM OK #{call_no}] API tra ve sau {elapsed_ms:.0f}ms, "
-            f"JSON co {len(result)} keys: {_short(sorted(result.keys()), 200)}")
+            f"[LLM OK #{call_no}] API trả về sau {elapsed_ms:.0f}ms, "
+            f"JSON có {len(result)} keys: {_short(sorted(result.keys()), 200)}")
         return result
 
 
@@ -255,24 +255,24 @@ def parse_with_llm_first(question_text, as_of, calendar, rulebook,
             question_text, as_of, calendar, rulebook,
             products, customers, backend=backend,
         )
-    except Exception as exc:  # noqa: BLE001 - LLM loi bat ky cung fallback
+    except Exception as exc:  # noqa: BLE001 - LLM lỗi bất kỳ cũng fallback
         if logger is not None:
             logger.log(
-                f"[PARSE ERROR] LLM loi, chuyen sang parser template: {exc!r}",
+                f"[PARSE ERROR] LLM lỗi, chuyển sang parser template: {exc!r}",
                 important=True)
         # Bước 2: LLM lỗi -> template một lần duy nhất.
         try:
             return template_fallback_fn(
                 question_text, as_of, calendar, rulebook, products, customers,
-                reason=f"llm_parser loi, fallback ve template: {exc!r}",
+                reason=f"llm_parser lỗi, fallback về template: {exc!r}",
             )
         except Exception:
             # Bước 3: template cũng lỗi -> log rồi raise lại để tầng trên
             # chuyển thành abstain, không bịa đáp án, không crash shop.
             if logger is not None:
                 logger.log(
-                    "[TEMPLATE ERROR] Parser template cung loi, cau nay se "
-                    "abstain o tang solver/gate.",
+                    "[TEMPLATE ERROR] Parser template cũng lỗi, câu này sẽ "
+                    "abstain ở tầng solver/gate.",
                     important=True)
             raise
     # LLM đã trả về: kiểm tra kết quả có dùng được không trước khi quyết.
@@ -280,20 +280,20 @@ def parse_with_llm_first(question_text, as_of, calendar, rulebook,
     if result is None or parsed is None:
         if logger is not None:
             logger.log(
-                "[PARSE ERROR] LLM tra ket qua khong dung duoc "
-                "(None hoac khong co parsed), chuyen sang parser template.",
+                "[PARSE ERROR] LLM trả kết quả không dùng được "
+                "(None hoặc không có parsed), chuyển sang parser template.",
                 important=True)
         try:
             return template_fallback_fn(
                 question_text, as_of, calendar, rulebook, products, customers,
-                reason="llm_parser tra ket qua khong dung duoc, "
-                "fallback ve template",
+                reason="llm_parser trả kết quả không dùng được, "
+                "fallback về template",
             )
         except Exception:
             if logger is not None:
                 logger.log(
-                    "[TEMPLATE ERROR] Parser template cung loi, cau nay se "
-                    "abstain o tang solver/gate.",
+                    "[TEMPLATE ERROR] Parser template cũng lỗi, câu này sẽ "
+                    "abstain ở tầng solver/gate.",
                     important=True)
             raise
     # LLM thành công, hoặc đã tự fallback bên trong: trả ngay, KHÔNG gọi
@@ -304,7 +304,7 @@ def parse_with_llm_first(question_text, as_of, calendar, rulebook,
 def parse_args(argv=None):
     """Đọc tham số dòng lệnh (tương tự run_phase2_llm.py, thêm --env-file, --reports-dir, --log-file, --quiet, --no-log-file)."""
     parser = argparse.ArgumentParser(
-        description="Chay pipeline phase2_llm voi backend OpenAI (CHI PHAT TRIEN), kem log day du.")
+        description="Chạy pipeline phase2_llm với backend OpenAI (CHỈ PHÁT TRIỂN), kèm log đầy đủ.")
     parser.add_argument(
         "--train-dir", default="../train",
         help="Thư mục split train (mặc định ../train, tính từ phase2_llm/).")
@@ -381,8 +381,8 @@ def main(argv=None):
         try:
             real_backend = OpenAIResponsesBackend(env_file=args.env_file)
         except RuntimeError as exc:
-            logger.log(f"Loi cau hinh OpenAI: {exc}", important=True)
-            print(f"Loi cau hinh OpenAI: {exc}", file=sys.stderr)
+            logger.log(f"Lỗi cấu hình OpenAI: {exc}", important=True)
+            print(f"Lỗi cấu hình OpenAI: {exc}", file=sys.stderr)
             return 2
         backend = LoggingBackend(real_backend, logger)
         config = real_backend.config
@@ -393,24 +393,24 @@ def main(argv=None):
 
         # --- Log bắt đầu: đủ để người khác tái hiện đợt chạy, trừ key ---
         logger.log("=" * 70, important=True)
-        logger.log("BAT DAU chay phase2_llm voi backend OpenAI (CHI PHAT TRIEN)", important=True)
+        logger.log("BẮT ĐẦU chạy phase2_llm với backend OpenAI (CHỈ PHÁT TRIỂN)", important=True)
         logger.log(
-            "CANH BAO: submission nay KHONG dung de nop Docker cuoi "
-            "(Docker cuoi bat buoc offline, model cuc bo <= 15B).",
+            "CẢNH BÁO: submission này KHÔNG dùng để nộp Docker cuối "
+            "(Docker cuối bắt buộc offline, model cục bộ <= 15B).",
             important=True)
         logger.log(
-            f"Cau hinh LLM: model={config.model}, base_url={config.base_url}, "
+            f"Cấu hình LLM: model={config.model}, base_url={config.base_url}, "
             f"service_tier={config.service_tier}, temperature={config.temperature}, "
             f"max_output_tokens={config.max_output_tokens}, top_p={config.top_p}, "
             f"store={config.store}, timeout={config.timeout_seconds}s "
-            f"(OPENAI_API_KEY: da cau hinh, KHONG in ra day).",
+            f"(OPENAI_API_KEY: đã cấu hình, KHÔNG in ra đây).",
             important=True)
         logger.log(
-            f"Duong dan: train_dir={train_dir}, cache_dir={cache_dir}, "
+            f"Đường dẫn: train_dir={train_dir}, cache_dir={cache_dir}, "
             f"output={output_path}, reports_dir={reports_dir}, "
-            f"log_file={logger.log_file or '(tat file log)'}",
+            f"log_file={logger.log_file or '(tắt file log)'}",
             important=True)
-        logger.log(f"Shops: {shops or '(tat ca)'}, limit: {args.limit or '(khong gioi han)'}",
+        logger.log(f"Shops: {shops or '(tất cả)'}, limit: {args.limit or '(không giới hạn)'}",
                    important=True)
         logger.log("=" * 70, important=True)
 
@@ -435,12 +435,12 @@ def main(argv=None):
             logger.log(
                 f"[PARSE] source={result.source}, measure={measure}, "
                 f"confidence={result.confidence:.3f}, {parse_ms:.0f}ms, "
-                f"cau hoi={_short(question_text, 80)}"
+                f"câu hỏi={_short(question_text, 80)}"
                 + (f", notes={_short(notes, 300)}" if notes else ""))
             if result.source == "template_fallback":
                 logger.log(
-                    "[PARSE WARNING] Cau nay roi ve parser template, LLM khong parse duoc. "
-                    f"Ly do trong notes o tren (thuong la loi API o cac dong [LLM ERROR] truoc do).",
+                    "[PARSE WARNING] Câu này rơi về parser template, LLM không parse được. "
+                    f"Lý do trong notes ở trên (thường là lỗi API ở các dòng [LLM ERROR] trước đó).",
                     important=True)
             return result
 
@@ -450,7 +450,7 @@ def main(argv=None):
             logger.log(
                 f"[Q {question_counter['n']}] {question.get('business_id')} "
                 f"{question.get('id')} | as_of={question.get('as_of_date')} | "
-                f"cau hoi={_short(question.get('question', ''), 80)} | "
+                f"câu hỏi={_short(question.get('question', ''), 80)} | "
                 f"measure={info.get('measure')} | parse_source={info.get('parse_source')} | "
                 f"confidence={info.get('confidence', 0.0):.3f} | "
                 f"status={info.get('status')} | type={entry.get('type')} | "
@@ -462,9 +462,9 @@ def main(argv=None):
 
         def on_shop(business_id, n_questions, cache_hit, seconds, errors):
             logger.log(
-                f"[SHOP DONE] {business_id}: {n_questions} cau, "
+                f"[SHOP DONE] {business_id}: {n_questions} câu, "
                 f"cache={'hit' if cache_hit else 'miss'}, {seconds:.1f}s"
-                + (f", LOI: {_short(errors, 300)}" if errors else ""),
+                + (f", LỖI: {_short(errors, 300)}" if errors else ""),
                 important=True)
 
         summary = run_phase2_llm(
@@ -475,21 +475,21 @@ def main(argv=None):
         score = summary.get("score") or {}
         logger.log("=" * 70, important=True)
         logger.log(
-            f"Done: {summary['written']}/{summary['total_questions']} cau, "
+            f"Done: {summary['written']}/{summary['total_questions']} câu, "
             f"parse_sources={summary['parse_sources']}, "
             f"PA={score.get('pa')}, correct={score.get('correct')}, "
             f"wrong={score.get('wrong')}, abstain={score.get('abstain')}, "
             f"holdout_pa={score.get('holdout_pa')}, "
-            f"thoi_gian={summary['run_seconds']}s",
+            f"thời_gian={summary['run_seconds']}s",
             important=True)
         logger.log(
-            f"LLM API: {backend.calls} lan goi, {backend.failures} lan loi. "
-            f"File submission: {output_path}. File bao cao: {reports_dir}. "
-            f"File log: {logger.log_file or '(tat file log)'}",
+            f"LLM API: {backend.calls} lần gọi, {backend.failures} lần lỗi. "
+            f"File submission: {output_path}. File báo cáo: {reports_dir}. "
+            f"File log: {logger.log_file or '(tắt file log)'}",
             important=True)
         if summary["shop_errors"]:
             logger.log(
-                f"Shop loi (da bat, khong giet dot chay): {summary['shop_errors']}",
+                f"Shop lỗi (đã bắt, không giết đợt chạy): {summary['shop_errors']}",
                 important=True)
         # Cảnh báo quan trọng nhất cho người đọc log: nếu toàn bộ câu đều
         # fallback thì đây KHÔNG phải kết quả LLM, dù dòng Done trông vẫn
@@ -497,10 +497,10 @@ def main(argv=None):
         parse_sources = summary.get("parse_sources") or {}
         if parse_sources and set(parse_sources.keys()) == {"template_fallback"}:
             logger.log(
-                "CANH BAO: TAT CA cau deu roi ve parser template, LLM khong parse "
-                "duoc cau nao. Hay doc cac dong [LLM ERROR] va [PARSE WARNING] o tren "
-                "de biet loi API cu the, dung lay PA cua dot chay nay so voi baseline "
-                "LLM (no chi la ket qua template cu).",
+                "CẢNH BÁO: TẤT CẢ câu đều rơi về parser template, LLM không parse "
+                "được câu nào. Hãy đọc các dòng [LLM ERROR] và [PARSE WARNING] ở trên "
+                "để biết lỗi API cụ thể, đừng lấy PA của đợt chạy này so với baseline "
+                "LLM (nó chỉ là kết quả template cũ).",
                 important=True)
         logger.log("=" * 70, important=True)
         return 0

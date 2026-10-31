@@ -259,7 +259,7 @@ class TestValidateAndBuild(unittest.TestCase):
     def test_truong_la_thi_raise(self):
         """Trường ngoài hợp đồng (ví dụ reasoning) phải raise để repair bỏ nó đi."""
         data = _valid_json()
-        data["reasoning"] = "mo hinh tu nghi"
+        data["reasoning"] = "mô hình tự nghĩ"
         with self.assertRaises(ValueError):
             validate_and_build(data, _PRODUCTS, _CUSTOMERS)
 
@@ -349,7 +349,7 @@ class TestParseWithLlm(unittest.TestCase):
 
     def test_backend_loi_thi_fallback(self):
         """Backend raise RuntimeError thì fallback ngay, không crash, không retry vô hạn."""
-        backend = StubBackend([RuntimeError("khong tai duoc model")])
+        backend = StubBackend([RuntimeError("không tải được model")])
         result = parse_with_llm(
             "doanh thu thang 7/2025", _AS_OF, None, None,
             _PRODUCTS, _CUSTOMERS, backend=backend, template_parse_fn=_fake_template,
@@ -375,7 +375,7 @@ class TestParseWithLlm(unittest.TestCase):
         trường hợp template cũng hỏng, và khẳng định không crash.
         """
         def _broken_template(*args, **kwargs):
-            raise RuntimeError("template hong")
+            raise RuntimeError("template hỏng")
 
         result = parse_with_llm(
             "cau hoi la", _AS_OF, None, None,

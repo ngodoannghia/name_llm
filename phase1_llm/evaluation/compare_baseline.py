@@ -295,7 +295,7 @@ def compare_shops(baseline_shops, llm_shops):
                 "business_id": business_id,
                 "base": base, "llm": llm,
                 "rows_khop": False,
-                "chi_tiet": "chi co o mot phia (baseline hoac LLM)",
+                "chi_tiet": "chỉ có ở một phía (baseline hoặc LLM)",
             })
             continue
         rows_in_base = base.get("rows_in")
@@ -346,7 +346,7 @@ def print_table(so_sanh):
         cuối dòng để coordinator nhìn là thấy ngay.
     """
     print("=" * 118)
-    print("SO SANH THEO TUNG SHOP (baseline phase1 vs summary LLM)")
+    print("SO SÁNH THEO TỪNG SHOP (baseline phase1 vs summary LLM)")
     print("=" * 118)
     header = (f"{'shop':<10} {'rows_in':>10} {'rows_out':>10} "
               f"{'base_map':>8} {'llm_them':>8} {'rejected':>8} "
@@ -355,7 +355,7 @@ def print_table(so_sanh):
     print("-" * 118)
     for row in so_sanh:
         if row["base"] is None or row["llm"] is None:
-            print(f"{row['business_id']:<10} {'(thieu mot phia)':<100} "
+            print(f"{row['business_id']:<10} {'(thiếu một phía)':<100} "
                   f"{row['chi_tiet']}")
             continue
         print(f"{row['business_id']:<10} "
@@ -382,11 +382,11 @@ def print_nhom(ten_nhom, danh_sach, so_sanh_theo_id):
         Không trả gì; chỉ in. Nhóm này không ảnh hưởng tới con số tổng
         hợp chung, chỉ giúp coordinator nhìn nhanh shop khó.
     """
-    print(f"\n--- Nhom shop kho (chi loc bao cao, khong dung de suy luan map): {ten_nhom} ---")
+    print(f"\n--- Nhóm shop khó (chỉ lọc báo cáo, không dùng để suy luận map): {ten_nhom} ---")
     for business_id in danh_sach:
         row = so_sanh_theo_id.get(business_id)
         if row is None or row["base"] is None or row["llm"] is None:
-            print(f"  {business_id}: khong co du trong ca 2 file")
+            print(f"  {business_id}: không có đủ trong cả 2 file")
             continue
         print(f"  {business_id}: llm_them={row['llm_added_mappings']}, "
               f"rejected={row['rejected_count']}, "
@@ -424,14 +424,14 @@ def summarize(so_sanh, baseline_shops, llm_shops):
         "so_shop_profile_thay_doi": sum(1 for r in du if r["profile_delta"]),
         "so_shop_rows_khac_baseline": sum(1 for r in du if not r["rows_khop"]),
     }
-    print("\nTONG HOP")
+    print("\nTỔNG HỢP")
     print("-" * 118)
     for khoa, gia_tri in tong_hop.items():
         print(f"  {khoa}: {gia_tri}")
     if tong_hop["so_shop_rows_khac_baseline"]:
-        print("  CANH BAO: co shop rows khac baseline - can giai thich "
-              "trong bao cao (xem cot ghi chu o bang tren), khong duoc "
-              "de chenh lech khong giai thich.")
+        print("  CẢNH BÁO: có shop rows khác baseline - cần giải thích "
+              "trong báo cáo (xem cột ghi chú ở bảng trên), không được "
+              "để chênh lệch không giải thích.")
     return tong_hop
 
 
@@ -448,13 +448,13 @@ def parse_args(argv=None):
     """
     mac_dinh_src = Path(__file__).resolve().parents[2] / "phase1" / "src"
     parser = argparse.ArgumentParser(
-        description="So sanh summary ingest LLM voi baseline phase1.")
+        description="So sánh summary ingest LLM với baseline phase1.")
     parser.add_argument("--baseline", default="../phase1/reports/phase1_summary.json",
-                        help="Duong dan baseline phase1_summary.json")
+                        help="Đường dẫn baseline phase1_summary.json")
     parser.add_argument("--llm", default="reports/phase1_llm_summary.json",
-                        help="Duong dan summary LLM phase1_llm_summary.json")
+                        help="Đường dẫn summary LLM phase1_llm_summary.json")
     parser.add_argument("--phase1-src", default=str(mac_dinh_src),
-                        help="Thu muc phase1/src de kiem tra SHA256")
+                        help="Thư mục phase1/src để kiểm tra SHA256")
     return parser.parse_args(argv)
 
 
@@ -473,27 +473,27 @@ def main(argv=None):
     args = parse_args(argv)
 
     # 1. Kiểm tra SHA256 phase1 lúc chạy (chỉ báo cáo, không tự sửa).
-    print("KIEM TRA SHA256 PHASE1 (luc chay, so voi SHA truoc khi lam)")
+    print("KIỂM TRA SHA256 PHASE1 (lúc chạy, so với SHA trước khi làm)")
     print("-" * 118)
     ket_qua_sha, sha_pass = check_phase1_sha(args.phase1_src)
     for ten_file in sorted(ket_qua_sha):
         sha_thuc_te, khop = ket_qua_sha[ten_file]
         if sha_thuc_te is None:
-            print(f"  {ten_file}: FAIL (khong tim thay file trong {args.phase1_src})")
+            print(f"  {ten_file}: FAIL (không tìm thấy file trong {args.phase1_src})")
         else:
             print(f"  {ten_file}: {'PASS' if khop else 'FAIL'} ({sha_thuc_te})")
     if not sha_pass:
-        print("  CANH BAO: SHA256 phase1 khong khop - phase1 co the da bi sua "
-              "sau baseline, ket qua so sanh khong con dang tin.")
+        print("  CẢNH BÁO: SHA256 phase1 không khớp - phase1 có thể đã bị sửa "
+              "sau baseline, kết quả so sánh không còn đáng tin.")
 
     # 2. Đọc baseline (bắt buộc phải có).
     try:
         baseline = load_json(args.baseline)
     except FileNotFoundError:
-        print(f"\nLOI: khong tim thay baseline: {args.baseline}", file=sys.stderr)
+        print(f"\nLỖI: không tìm thấy baseline: {args.baseline}", file=sys.stderr)
         return 1
     except json.JSONDecodeError as exc:
-        print(f"\nLOI: baseline khong phai JSON hop le ({args.baseline}): {exc}",
+        print(f"\nLỖI: baseline không phải JSON hợp lệ ({args.baseline}): {exc}",
               file=sys.stderr)
         return 1
 
@@ -501,13 +501,13 @@ def main(argv=None):
     try:
         llm_summary = load_json(args.llm)
     except FileNotFoundError:
-        print(f"\nCANH BAO RO RANG: summary LLM chua ton tai: {args.llm}",
+        print(f"\nCẢNH BÁO RÕ RÀNG: summary LLM chưa tồn tại: {args.llm}",
               file=sys.stderr)
-        print("Runner cua Child 2 chua sinh reports/phase1_llm_summary.json - "
-              "khong co so lieu LLM de so sanh, khong bia so.", file=sys.stderr)
+        print("Runner của Child 2 chưa sinh reports/phase1_llm_summary.json - "
+              "không có số liệu LLM để so sánh, không bịa số.", file=sys.stderr)
         return 2
     except json.JSONDecodeError as exc:
-        print(f"\nLOI: summary LLM khong phai JSON hop le ({args.llm}): {exc}",
+        print(f"\nLỖI: summary LLM không phải JSON hợp lệ ({args.llm}): {exc}",
               file=sys.stderr)
         return 1
 
@@ -534,11 +534,11 @@ def main(argv=None):
     # 5. Phát hiện map chưa kiểm chứng.
     chua_kiem_chung = find_unverified(llm_summary)
     if chua_kiem_chung:
-        print("\nLOI: phat hien map chua kiem chung trong summary LLM:")
+        print("\nLỖI: phát hiện map chưa kiểm chứng trong summary LLM:")
         for muc in chua_kiem_chung:
             print(f"  - {muc}")
         return 1
-    print("\nKhong phat hien map chua kiem chung nao trong summary LLM.")
+    print("\nKhông phát hiện map chưa kiểm chứng nào trong summary LLM.")
     if not sha_pass:
         return 1
     return 0

@@ -405,17 +405,17 @@ def _parse_iso_date(value, field_name, errors):
     if isinstance(value, datetime.datetime):
         return value.date()
     if not isinstance(value, str):
-        errors.append(f"{field_name} phai la chuoi YYYY-MM-DD hoac null, nhan duoc {type(value).__name__}.")
+        errors.append(f"{field_name} phải là chuỗi YYYY-MM-DD hoặc null, nhận được {type(value).__name__}.")
         return None
     text = value.strip()
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
-        errors.append(f"{field_name} '{value}' khong dung dinh dang YYYY-MM-DD.")
+        errors.append(f"{field_name} '{value}' không đúng định dạng YYYY-MM-DD.")
         return None
     try:
         year, month, day = (int(part) for part in text.split("-"))
         return datetime.date(year, month, day)
     except ValueError:
-        errors.append(f"{field_name} '{value}' khong phai ngay hop le tren lich.")
+        errors.append(f"{field_name} '{value}' không phải ngày hợp lệ trên lịch.")
         return None
 
 
@@ -486,15 +486,15 @@ def _canonical_entity(kind, key, display, products, customers):
     if kind == "none":
         if norm_key or norm_display:
             raise ValueError(
-                "entity_kind la 'none' nhung entity_key/entity_display khong rong: "
-                "khong nhat quan, can sua kind hoac bo key/display."
+                "entity_kind là 'none' nhưng entity_key/entity_display không rỗng: "
+                "không nhất quán, cần sửa kind hoặc bỏ key/display."
             )
         return (None, None)
     if kind in ("product", "customer"):
         if not norm_key and not norm_display:
             raise ValueError(
-                f"entity_kind la '{kind}' nhung khong co entity_key lan entity_display: "
-                "khong the kiem chung thuc the."
+                f"entity_kind là '{kind}' nhưng không có entity_key lẫn entity_display: "
+                "không thể kiểm chứng thực thể."
             )
         entities = products if kind == "product" else customers
         for entity, norms in _entity_candidates(entities):
@@ -503,13 +503,13 @@ def _canonical_entity(kind, key, display, products, customers):
             ):
                 return (entity.get("key"), entity.get("display"))
         raise ValueError(
-            f"Thuc the {kind} voi key={key!r} display={display!r} khong ton tai "
-            "trong danh sach cua shop: khong duoc doan thuc the khac thay the."
+            f"Thực thể {kind} với key={key!r} display={display!r} không tồn tại "
+            "trong danh sách của shop: không được đoán thực thể khác thay thế."
         )
     if kind == "group":
         if not norm_key and not norm_display:
             raise ValueError(
-                "entity_kind la 'group' nhung khong co ten nhom: khong the kiem chung."
+                "entity_kind là 'group' nhưng không có tên nhóm: không thể kiểm chứng."
             )
         wanted = norm_key or norm_display
         seen = {}
@@ -522,22 +522,22 @@ def _canonical_entity(kind, key, display, products, customers):
         if wanted in seen:
             return (wanted, seen[wanted])
         raise ValueError(
-            f"Nhom {key!r}/{display!r} khong ton tai trong shop: khong duoc doan nhom khac."
+            f"Nhóm {key!r}/{display!r} không tồn tại trong shop: không được đoán nhóm khác."
         )
     if kind == "payment":
         wanted = norm_key or norm_display
         if wanted in _KNOWN_PAYMENTS:
             return (wanted, _KNOWN_PAYMENTS[wanted])
         raise ValueError(
-            f"Hinh thuc thanh toan {key!r}/{display!r} khong nam trong bang thanh toan "
-            "chung: khong the kiem chung, can fallback."
+            f"Hình thức thanh toán {key!r}/{display!r} không nằm trong bảng thanh toán "
+            "chung: không thể kiểm chứng, cần fallback."
         )
     # employee/channel: không có danh sách kiểm chứng trong chữ ký
     # validate_and_build (chỉ có products/customers), nên không thể
     # khẳng định thực thể đó có trong shop hay không.
     raise ValueError(
-        f"entity_kind '{kind}' khong kiem chung duoc tu products/customers cua shop: "
-        "can fallback ve parser template thay vi tin mo hinh."
+        f"entity_kind '{kind}' không kiểm chứng được từ products/customers của shop: "
+        "cần fallback về parser template thay vì tin mô hình."
     )
 
 
@@ -655,26 +655,26 @@ class TransformersBackend(LocalModelBackend):
             return
         if not self.model_id:
             raise RuntimeError(
-                "TransformersBackend chua co model_id: model mac dinh CHUA duoc chon "
-                "va CHUA duoc kiem chung. Hay chon mot model public <= 15B, phat hanh "
-                "truoc 01/10/2026, co licence cho phep, roi truyen model_id vao day "
-                "truoc khi dong Docker. Khong tu chon model thay nguoi tich hop."
+                "TransformersBackend chưa có model_id: model mặc định CHƯA được chọn "
+                "và CHƯA được kiểm chứng. Hãy chọn một model public <= 15B, phát hành "
+                "trước 01/10/2026, có licence cho phép, rồi truyền model_id vào đây "
+                "trước khi đóng Docker. Không tự chọn model thay người tích hợp."
             )
         try:
             import transformers  # noqa: F401  (chỉ kiểm tra gói có sẵn không)
         except ImportError as exc:
             raise RuntimeError(
-                "TransformersBackend khong kha dung: thieu goi 'transformers'. "
-                "Hay cai transformers (va torch) trong moi truong Docker roi thu lai; "
-                "khong tra JSON gia khi backend khong co that."
+                "TransformersBackend không khả dụng: thiếu gói 'transformers'. "
+                "Hãy cài transformers (và torch) trong môi trường Docker rồi thử lại; "
+                "không trả JSON giả khi backend không có thật."
             ) from exc
         try:
             import torch
             from transformers import AutoModelForCausalLM, AutoTokenizer
         except ImportError as exc:
             raise RuntimeError(
-                "TransformersBackend khong kha dung: thieu 'torch' hoac lop Auto "
-                "cua transformers. Hay cai day du torch + transformers roi thu lai."
+                "TransformersBackend không khả dụng: thiếu 'torch' hoặc lớp Auto "
+                "của transformers. Hãy cài đầy đủ torch + transformers rồi thử lại."
             ) from exc
         try:
             self._tokenizer = AutoTokenizer.from_pretrained(self.model_id)
@@ -697,9 +697,9 @@ class TransformersBackend(LocalModelBackend):
             self._model.eval()
         except Exception as exc:
             raise RuntimeError(
-                f"TransformersBackend khong tai duoc model '{self.model_id}': {exc}. "
-                "Co the weights chua co san, sai model_id, hoac thieu bo nho. "
-                "Khong tra JSON gia khi model khong tai duoc."
+                f"TransformersBackend không tải được model '{self.model_id}': {exc}. "
+                "Có thể weights chưa có sẵn, sai model_id, hoặc thiếu bộ nhớ. "
+                "Không trả JSON giả khi model không tải được."
             ) from exc
         self._loaded = True
 
@@ -724,10 +724,10 @@ class TransformersBackend(LocalModelBackend):
         đóng object ngoài cùng.
         """
         if not text:
-            raise RuntimeError("Model tra ve text rong, khong co JSON.")
+            raise RuntimeError("Model trả về text rỗng, không có JSON.")
         start = text.find("{")
         if start < 0:
-            raise RuntimeError("Output cua model khong chua object JSON.")
+            raise RuntimeError("Output của model không chứa object JSON.")
         depth = 0
         in_string = False
         escaped = False
@@ -752,12 +752,12 @@ class TransformersBackend(LocalModelBackend):
                         parsed = json.loads(text[start:index + 1])
                     except json.JSONDecodeError as exc:
                         raise RuntimeError(
-                            f"Khong parse duoc JSON tu output cua model: {exc}"
+                            f"Không parse được JSON từ output của model: {exc}"
                         ) from exc
                     if not isinstance(parsed, dict):
-                        raise RuntimeError("JSON cua model khong phai object.")
+                        raise RuntimeError("JSON của model không phải object.")
                     return parsed
-        raise RuntimeError("Output cua model co dau '{' mo nhung khong dong du.")
+        raise RuntimeError("Output của model có dấu '{' mở nhưng không đóng đủ.")
 
     def generate_json(self, prompt: str, schema: dict) -> dict:
         """Sinh JSON theo schema bằng model transformers cục bộ.
@@ -801,7 +801,7 @@ class TransformersBackend(LocalModelBackend):
             raise
         except Exception as exc:
             raise RuntimeError(
-                f"TransformersBackend sinh text that bai: {exc}"
+                f"TransformersBackend sinh text thất bại: {exc}"
             ) from exc
         return self._extract_json_object(text_out)
 
@@ -866,8 +866,8 @@ def summarize_rulebook(rulebook, calendar=None):
     """
     if rulebook is None:
         return (
-            "Khong co rulebook cua split dang chay: chi dung ky ghi ro trong cau hoi, "
-            "khong suy them luat thoi gian hay xep hang ngoai cau hoi."
+            "Không có rulebook của split đang chạy: chỉ dùng kỳ ghi rõ trong câu hỏi, "
+            "không suy thêm luật thời gian hay xếp hạng ngoài câu hỏi."
         )
     text = None
     if isinstance(rulebook, str):
@@ -887,7 +887,7 @@ def summarize_rulebook(rulebook, calendar=None):
             text = str(rulebook)
     text = " ".join(str(text).split())
     if len(text) > 2000:
-        text = text[:2000] + " ... (da cat ngan)"
+        text = text[:2000] + " ... (đã cắt ngắn)"
     return text
 
 
@@ -907,12 +907,12 @@ def _format_entity_list(entities, label):
         biết tên/mã để chọn thực thể, số liệu phải do solver tính.
 
     Trường hợp biên:
-        - entities là None hoặc rỗng -> trả dòng 'Khong co'.
+        - entities là None hoặc rỗng -> trả dòng 'Không có'.
         - Phần tử không phải dict (groups/payments dạng chuỗi) -> dùng
           chính chuỗi đó làm tên hiển thị.
     """
     if not entities:
-        return f"{label}: Khong co."
+        return f"{label}: Không có."
     items = []
     for entity in entities:
         if isinstance(entity, dict):
@@ -932,9 +932,9 @@ def _format_entity_list(entities, label):
     header = f"{label} (tong {total}):"
     if total > len(shown):
         shown.append(
-            f"... (da cat, chi hien {len(shown)} / {total} muc; "
-            "neu thuc the trong cau khong co trong danh sach hien thi, "
-            "khong duoc tu bia key/display)."
+            f"... (đã cắt, chỉ hiện {len(shown)} / {total} mục; "
+            "nếu thực thể trong câu không có trong danh sách hiển thị, "
+            "không được tự bịa key/display)."
         )
     return header + "\n" + "\n".join(shown)
 
@@ -978,40 +978,40 @@ def build_prompt(question_text, normalized_text, as_of, products, customers, gro
     else:
         as_of_text = str(as_of)
     prompt = (
-        "Ban la bo phan phan tich cau hoi cua he thong DataMate. "
-        "Nhiem vu DUY NHAT cua ban la doc cau hoi tieng Viet duoi day va tra ve "
-        "MOT object JSON theo dung schema ParsedQuestion, khong giai thich, "
-        "khong tinh toan dap an so, khong them text ngoai JSON.\n\n"
-        f"Cau hoi goc: {question_text}\n"
-        f"Cau hoi chuan hoa khong dau: {normalized_text}\n"
-        f"Ngay hom nay (as_of_date): {as_of_text}. Moi cach noi tuong doi "
-        "(thang nay, tuan roi, hom nay, hom qua, N ngay gan nhat...) deu tinh theo ngay nay.\n\n"
-        "Danh sach thuc the cua shop (CHI duoc dung nhung thuc the co trong danh sach nay, "
-        "dung dung key/display goc; KHONG dua du lieu dong don vao day nen ban KHONG thay doanh so):\n"
+        "Bạn là bộ phận phân tích câu hỏi của hệ thống DataMate. "
+        "Nhiệm vụ DUY NHẤT của bạn là đọc câu hỏi tiếng Việt dưới đây và trả về "
+        "MỘT object JSON theo đúng schema ParsedQuestion, không giải thích, "
+        "không tính toán đáp án số, không thêm text ngoài JSON.\n\n"
+        f"Câu hỏi gốc: {question_text}\n"
+        f"Câu hỏi chuẩn hoá không dấu: {normalized_text}\n"
+        f"Ngày hôm nay (as_of_date): {as_of_text}. Mọi cách nói tương đối "
+        "(tháng này, tuần rồi, hôm nay, hôm qua, N ngày gần nhất...) đều tính theo ngày này.\n\n"
+        "Danh sách thực thể của shop (CHỈ được dùng những thực thể có trong danh sách này, "
+        "dùng đúng key/display gốc; KHÔNG đưa dữ liệu dòng đơn vào đây nên bạn KHÔNG thấy doanh số):\n"
         f"{_format_entity_list(products, 'San pham')}\n"
         f"{_format_entity_list(customers, 'Khach hang')}\n"
         f"{_format_entity_list(groups, 'Nhom')}\n"
         f"{_format_entity_list(payments, 'Hinh thuc thanh toan')}\n\n"
-        f"Tom tat rulebook ve thoi gian va xep hang: {rulebook_summary}\n\n"
-        "Quy tac bat buoc:\n"
-        "- measure chi duoc lay trong enum: revenue, order_count, quantity, cancel_rate, "
+        f"Tóm tắt rulebook về thời gian và xếp hạng: {rulebook_summary}\n\n"
+        "Quy tắc bắt buộc:\n"
+        "- measure chỉ được lấy trong enum: revenue, order_count, quantity, cancel_rate, "
         "revenue_share, growth_percent, growth_amount, top_product, top_customer, top_employee, "
         "best_day, best_month, debt_total, debt_top, import_total, avg_price, price_on_day, "
         "continuous_growth, revenue_by_payment, revenue_by_group, revenue_by_channel, "
         "quantity_by_unit, product_revenue, unknown.\n"
-        "- period_kind chi duoc lay trong: absolute, relative, snapshot, multi_month, none. "
-        "period_start/period_end la chuoi YYYY-MM-DD hoac null. Ky snapshot (den het ngay X) thi "
-        "period_start=null, period_end=X. period_months chi dien khi period_kind=multi_month, "
-        "dang list cac [nam, thang] (so nguyen); cac ky khac de [].\n"
-        "- ranking_k la null neu khong phai cau xep hang, la 1 neu noi 'nhat', la N neu noi 'top N'.\n"
-        "- threshold_op chi duoc lay trong: gte, gt, lte, lt, hoac null.\n"
-        "- answer_type chi duoc lay trong: number, percent, string, date, boolean, list, table, unknown.\n"
-        "- Neu thuc the trong cau KHONG co trong danh sach tren: KHONG duoc bia key/display, "
-        "hay de entity_kind='none', entity_key=null, entity_display=null, va ghi ro vao parse_notes.\n"
-        "- Neu ky hoac measure khong xac dinh duoc: dung 'none'/'unknown', ghi ro vao parse_notes, "
-        "KHONG duoc doan ky hay measure de lap cho trong.\n"
-        "- confidence_parse la so 0..1, chi do chac cua viec phan tich cau hoi.\n"
-        "- Chi tra DUY NHAT object JSON, khong giai thich, khong tinh so dap an.\n"
+        "- period_kind chỉ được lấy trong: absolute, relative, snapshot, multi_month, none. "
+        "period_start/period_end là chuỗi YYYY-MM-DD hoặc null. Kỳ snapshot (đến hết ngày X) thì "
+        "period_start=null, period_end=X. period_months chỉ điền khi period_kind=multi_month, "
+        "dạng list các [năm, tháng] (số nguyên); các kỳ khác để [].\n"
+        "- ranking_k là null nếu không phải câu xếp hạng, là 1 nếu nói 'nhất', là N nếu nói 'top N'.\n"
+        "- threshold_op chỉ được lấy trong: gte, gt, lte, lt, hoặc null.\n"
+        "- answer_type chỉ được lấy trong: number, percent, string, date, boolean, list, table, unknown.\n"
+        "- Nếu thực thể trong câu KHÔNG có trong danh sách trên: KHÔNG được bịa key/display, "
+        "hãy để entity_kind='none', entity_key=null, entity_display=null, và ghi rõ vào parse_notes.\n"
+        "- Nếu kỳ hoặc measure không xác định được: dùng 'none'/'unknown', ghi rõ vào parse_notes, "
+        "KHÔNG được đoán kỳ hay measure để lấp chỗ trống.\n"
+        "- confidence_parse là số 0..1, chỉ độ chắc của việc phân tích câu hỏi.\n"
+        "- Chỉ trả DUY NHẤT object JSON, không giải thích, không tính số đáp án.\n"
     )
     return prompt
 
@@ -1044,12 +1044,12 @@ def build_repair_prompt(original_prompt, errors, previous_output) -> str:
     error_lines = "\n".join(f"- {error}" for error in errors)
     return (
         f"{original_prompt}\n\n"
-        "JSON ban tra truoc do SAI va can sua lai. Cac loi cu the:\n"
+        "JSON bạn trả trước đó SAI và cần sửa lại. Các lỗi cụ thể:\n"
         f"{error_lines}\n\n"
         f"JSON cu:\n{previous_text}\n\n"
-        "Hay tra DUY NHAT object JSON da sua het cac loi tren, theo dung schema, "
-        "khong giai thich, khong bia thuc the hay ky moi de lap cho trong. "
-        "Neu mot truong khong xac dinh duoc, hay dung 'unknown'/'none'/null va ghi vao parse_notes."
+        "Hãy trả DUY NHẤT object JSON đã sửa hết các lỗi trên, theo đúng schema, "
+        "không giải thích, không bịa thực thể hay kỳ mới để lấp chỗ trống. "
+        "Nếu một trường không xác định được, hãy dùng 'unknown'/'none'/null và ghi vào parse_notes."
     )
 
 
@@ -1104,68 +1104,68 @@ def validate_and_build(data: dict, products, customers) -> ParsedQuestion:
     errors: list[str] = []
     if not isinstance(data, dict):
         raise ValueError(
-            f"Output cua model phai la object JSON (dict), nhan duoc {type(data).__name__}."
+            f"Output của model phải là object JSON (dict), nhận được {type(data).__name__}."
         )
     unknown_keys = sorted(set(data) - _KNOWN_JSON_KEYS)
     if unknown_keys:
-        errors.append(f"Co truong la ngoai hop dong: {', '.join(unknown_keys)}.")
+        errors.append(f"Có trường lạ ngoài hợp đồng: {', '.join(unknown_keys)}.")
     measure = data.get("measure")
     if measure not in MEASURE_VALUES:
-        errors.append(f"measure {measure!r} ngoai enum hop dong.")
+        errors.append(f"measure {measure!r} ngoài enum hợp đồng.")
     entity_kind = data.get("entity_kind")
     if entity_kind not in ENTITY_KIND_VALUES:
-        errors.append(f"entity_kind {entity_kind!r} ngoai enum hop dong.")
+        errors.append(f"entity_kind {entity_kind!r} ngoài enum hợp đồng.")
     period_kind = data.get("period_kind")
     if period_kind not in PERIOD_KIND_VALUES:
-        errors.append(f"period_kind {period_kind!r} ngoai enum hop dong.")
+        errors.append(f"period_kind {period_kind!r} ngoài enum hợp đồng.")
     answer_type = data.get("answer_type")
     if answer_type not in ANSWER_TYPE_VALUES:
-        errors.append(f"answer_type {answer_type!r} ngoai enum hop dong.")
+        errors.append(f"answer_type {answer_type!r} ngoài enum hợp đồng.")
     ranking_target = data.get("ranking_target", "none")
     if ranking_target not in RANKING_TARGET_VALUES:
-        errors.append(f"ranking_target {ranking_target!r} ngoai enum hop dong.")
+        errors.append(f"ranking_target {ranking_target!r} ngoài enum hợp đồng.")
     ranking_metric = data.get("ranking_metric")
     if ranking_metric is not None and ranking_metric not in RANKING_METRIC_VALUES:
-        errors.append(f"ranking_metric {ranking_metric!r} ngoai enum hop dong.")
+        errors.append(f"ranking_metric {ranking_metric!r} ngoài enum hợp đồng.")
     ranking_k = data.get("ranking_k")
     if ranking_k is not None:
         if isinstance(ranking_k, bool) or not isinstance(ranking_k, int):
-            errors.append(f"ranking_k phai la int hoac null, nhan duoc {ranking_k!r}.")
+            errors.append(f"ranking_k phải là int hoặc null, nhận được {ranking_k!r}.")
         elif ranking_k < 1 or ranking_k > 100:
-            errors.append(f"ranking_k {ranking_k} ngoai khoang hop le 1..100.")
+            errors.append(f"ranking_k {ranking_k} ngoài khoảng hợp lệ 1..100.")
     unit = data.get("unit")
     if unit is not None and (not isinstance(unit, str) or not unit.strip()):
-        errors.append(f"unit phai la chuoi khong rong hoac null, nhan duoc {unit!r}.")
+        errors.append(f"unit phải là chuỗi không rỗng hoặc null, nhận được {unit!r}.")
     threshold_money = data.get("threshold_money")
     if threshold_money is not None:
         if isinstance(threshold_money, bool) or not isinstance(threshold_money, (int, float)):
-            errors.append(f"threshold_money phai la so hoac null, nhan duoc {threshold_money!r}.")
+            errors.append(f"threshold_money phải là số hoặc null, nhận được {threshold_money!r}.")
         elif threshold_money != threshold_money or threshold_money in (float("inf"), float("-inf")):
-            errors.append("threshold_money khong duoc la NaN hoac vo cuc.")
+            errors.append("threshold_money không được là NaN hoặc vô cực.")
         elif threshold_money < 0:
-            errors.append(f"threshold_money {threshold_money} am la khong hop le.")
+            errors.append(f"threshold_money {threshold_money} âm là không hợp lệ.")
     threshold_op = data.get("threshold_op")
     if threshold_op is not None and threshold_op not in THRESHOLD_OP_VALUES:
-        errors.append(f"threshold_op {threshold_op!r} ngoai enum gte|gt|lte|lt.")
+        errors.append(f"threshold_op {threshold_op!r} ngoài enum gte|gt|lte|lt.")
     if threshold_money is None and threshold_op is not None:
-        errors.append("threshold_op co gia tri nhung threshold_money la null: khong nhat quan.")
+        errors.append("threshold_op có giá trị nhưng threshold_money là null: không nhất quán.")
     confidence_parse = data.get("confidence_parse", None)
     confidence_note = None
     if confidence_parse is None:
         confidence_parse = 0.5
-        confidence_note = "Model khong tra confidence_parse, mac dinh 0.5 (khong chac)."
+        confidence_note = "Model không trả confidence_parse, mặc định 0.5 (không chắc)."
     elif isinstance(confidence_parse, bool) or not isinstance(confidence_parse, (int, float)):
-        errors.append(f"confidence_parse phai la so 0..1, nhan duoc {confidence_parse!r}.")
+        errors.append(f"confidence_parse phải là số 0..1, nhận được {confidence_parse!r}.")
         confidence_parse = 0.5
     elif confidence_parse < 0 or confidence_parse > 1:
-        errors.append(f"confidence_parse {confidence_parse} ngoai khoang [0, 1].")
+        errors.append(f"confidence_parse {confidence_parse} ngoài khoảng [0, 1].")
     parse_notes = data.get("parse_notes", [])
     if not isinstance(parse_notes, list) or any(not isinstance(item, str) for item in parse_notes):
-        errors.append("parse_notes phai la list cac chuoi.")
+        errors.append("parse_notes phải là list các chuỗi.")
         parse_notes = [str(item) for item in parse_notes] if isinstance(parse_notes, list) else []
     normalized_text = data.get("normalized_text", "")
     if normalized_text is not None and not isinstance(normalized_text, str):
-        errors.append("normalized_text phai la chuoi.")
+        errors.append("normalized_text phải là chuỗi.")
         normalized_text = str(normalized_text)
     if normalized_text is None:
         normalized_text = ""
@@ -1178,61 +1178,61 @@ def validate_and_build(data: dict, products, customers) -> ParsedQuestion:
     if raw_months is None:
         raw_months = []
     if not isinstance(raw_months, list):
-        errors.append(f"period_months phai la list cac [nam, thang], nhan duoc {raw_months!r}.")
+        errors.append(f"period_months phải là list các [năm, tháng], nhận được {raw_months!r}.")
     else:
         for item in raw_months:
             if not isinstance(item, (list, tuple)) or len(item) != 2:
-                errors.append(f"period_months co phan tu khong phai [nam, thang]: {item!r}.")
+                errors.append(f"period_months có phần tử không phải [năm, tháng]: {item!r}.")
                 continue
             year, month = item
             if isinstance(year, bool) or isinstance(month, bool):
-                errors.append(f"period_months co gia tri bool khong hop le: {item!r}.")
+                errors.append(f"period_months có giá trị bool không hợp lệ: {item!r}.")
                 continue
             if not isinstance(year, int) or not isinstance(month, int):
-                errors.append(f"period_months phai la so nguyen: {item!r}.")
+                errors.append(f"period_months phải là số nguyên: {item!r}.")
                 continue
             if month < 1 or month > 12:
-                errors.append(f"period_months co thang ngoai 1..12: {item!r}.")
+                errors.append(f"period_months có tháng ngoài 1..12: {item!r}.")
                 continue
             if year < 1900 or year > 2200:
-                errors.append(f"period_months co nam ngoai khoang hop le: {item!r}.")
+                errors.append(f"period_months có năm ngoài khoảng hợp lệ: {item!r}.")
                 continue
             period_months.append((year, month))
     if period_months != sorted(set(period_months)):
         # Trùng lặp hoặc không tăng dần đều là dấu hiệu mô hình liệt kê
         # tháng lộn xộn; không tự sắp xếp lại vì thứ tự tháng là một
         # phần của ý nghĩa câu hỏi (ví dụ tăng liên tục theo thời gian).
-        errors.append("period_months phai tang dan theo thoi gian va khong trung lap.")
+        errors.append("period_months phải tăng dần theo thời gian và không trùng lặp.")
     if period_kind in PERIOD_KIND_VALUES:
         if period_kind == "none":
             if period_start is not None or period_end is not None or period_months:
-                errors.append("period_kind 'none' nhung lai co period_start/period_end/period_months.")
+                errors.append("period_kind 'none' nhưng lại có period_start/period_end/period_months.")
         elif period_kind == "snapshot":
             if period_start is not None:
-                errors.append("period_kind 'snapshot' thi period_start phai la null (anh chup den het ngay).")
+                errors.append("period_kind 'snapshot' thì period_start phải là null (ảnh chụp đến hết ngày).")
             if period_end is None:
-                errors.append("period_kind 'snapshot' thi period_end khong duoc null.")
+                errors.append("period_kind 'snapshot' thì period_end không được null.")
         elif period_kind == "multi_month":
             if not period_months:
-                errors.append("period_kind 'multi_month' thi period_months khong duoc rong.")
+                errors.append("period_kind 'multi_month' thì period_months không được rỗng.")
             if period_start is None or period_end is None:
-                errors.append("period_kind 'multi_month' thi period_start/period_end khong duoc null.")
+                errors.append("period_kind 'multi_month' thì period_start/period_end không được null.")
             elif period_start > period_end:
-                errors.append("period_start lon hon period_end.")
+                errors.append("period_start lớn hơn period_end.")
             elif period_months:
                 if (period_start.year, period_start.month) > period_months[0]:
-                    errors.append("period_start nam sau thang dau tien cua period_months.")
+                    errors.append("period_start nằm sau tháng đầu tiên của period_months.")
                 if (period_end.year, period_end.month) < period_months[-1]:
-                    errors.append("period_end nam truoc thang cuoi cung cua period_months.")
+                    errors.append("period_end nằm trước tháng cuối cùng của period_months.")
         else:  # absolute / relative
             if period_start is None or period_end is None:
-                errors.append(f"period_kind '{period_kind}' thi period_start/period_end khong duoc null.")
+                errors.append(f"period_kind '{period_kind}' thì period_start/period_end không được null.")
             elif period_start > period_end:
-                errors.append("period_start lon hon period_end.")
+                errors.append("period_start lớn hơn period_end.")
             if period_months:
-                errors.append(f"period_kind '{period_kind}' thi period_months phai rong.")
+                errors.append(f"period_kind '{period_kind}' thì period_months phải rỗng.")
     if errors:
-        raise ValueError("JSON sai schema / khong hop le: " + " ".join(errors))
+        raise ValueError("JSON sai schema / không hợp lệ: " + " ".join(errors))
 
     # --- Kiểm chứng thực thể (chỉ chạy khi các lỗi trên đã sạch, để
     # thông báo lỗi tập trung và repair không bị dội quá nhiều lỗi). ---
@@ -1305,7 +1305,7 @@ def _unknown_parsed(normalized_text):
         threshold_op=None,
         answer_type="unknown",
         confidence_parse=0.0,
-        parse_notes=["Khong parse duoc bang LLM lan template: tra unknown de abstain."],
+        parse_notes=["Không parse được bằng LLM lẫn template: trả unknown để abstain."],
         normalized_text=normalized_text,
     )
 
@@ -1352,15 +1352,15 @@ def _fallback_result(question_text, as_of, calendar, rulebook, products, custome
                     parsed=parsed,
                     source="template_fallback",
                     confidence=float(getattr(parsed, "confidence_parse", 0.0) or 0.0),
-                    notes=notes + ["Fallback ve parser template."] + template_notes,
+                    notes=notes + ["Fallback về parser template."] + template_notes,
                 )
             except Exception as exc:
-                notes.append(f"Parser template cung loi: {exc}.")
+                notes.append(f"Parser template cũng lỗi: {exc}.")
     return ParseResult(
         parsed=_unknown_parsed(normalized_text),
         source="template_fallback",
         confidence=0.0,
-        notes=notes + ["Khong co parser template kha dung: tra unknown de abstain."],
+        notes=notes + ["Không có parser template khả dụng: trả unknown để abstain."],
     )
 
 
@@ -1377,7 +1377,7 @@ def parse_with_llm(question_text, as_of, calendar, rulebook, products, customers
         products/customers: danh sách thực thể của shop (để đưa vào
             prompt và để kiểm chứng thực thể).
         groups/payments: danh sách nhóm / hình thức thanh toán của
-            shop, có thể None (khi None, prompt ghi "Khong co").
+            shop, có thể None (khi None, prompt ghi "Không có").
         backend: một LocalModelBackend (thường là TransformersBackend),
             hoặc None (khi đó đi thẳng fallback, không giả vờ có model).
         template_parse_fn: hàm parser template (thường là
@@ -1420,7 +1420,7 @@ def parse_with_llm(question_text, as_of, calendar, rulebook, products, customers
         rulebook_summary,
     )
     if backend is None:
-        fallback_notes = ["Khong co backend LLM: di thang fallback ve parser template."]
+        fallback_notes = ["Không có backend LLM: đi thẳng fallback về parser template."]
         if template_parse_fn is not None:
             try:
                 parsed = template_parse_fn(
@@ -1430,7 +1430,7 @@ def parse_with_llm(question_text, as_of, calendar, rulebook, products, customers
                     parsed=parsed,
                     source="template_fallback",
                     confidence=float(getattr(parsed, "confidence_parse", 0.0) or 0.0),
-                    notes=fallback_notes + ["Fallback ve parser template."]
+                    notes=fallback_notes + ["Fallback về parser template."]
                     + list(getattr(parsed, "parse_notes", []) or []),
                 )
             except Exception as exc:
@@ -1438,7 +1438,7 @@ def parse_with_llm(question_text, as_of, calendar, rulebook, products, customers
                     parsed=_unknown_parsed(normalized_text),
                     source="template_fallback",
                     confidence=0.0,
-                    notes=fallback_notes + [f"Parser template cung loi: {exc}."],
+                    notes=fallback_notes + [f"Parser template cũng lỗi: {exc}."],
                 )
         return _fallback_result(
             question_text, as_of, calendar, rulebook, products, customers,
@@ -1452,7 +1452,7 @@ def parse_with_llm(question_text, as_of, calendar, rulebook, products, customers
         try:
             raw_output = backend.generate_json(current_prompt, PARSED_QUESTION_JSON_SCHEMA)
         except Exception as exc:
-            errors.append(f"Loi backend o lan thu {attempt + 1}: {exc}.")
+            errors.append(f"Lỗi backend ở lần thứ {attempt + 1}: {exc}.")
             break
         try:
             parsed = validate_and_build(raw_output, products, customers)
@@ -1463,14 +1463,14 @@ def parse_with_llm(question_text, as_of, calendar, rulebook, products, customers
                 continue
             break
         except Exception as exc:
-            errors.append(f"Loi khong ngo khi validate: {exc}.")
+            errors.append(f"Lỗi không ngờ khi validate: {exc}.")
             break
         # JSON hợp lệ: ghi đè normalized_text bằng câu chuẩn hoá thật.
         parsed.normalized_text = normalized_text
         source = "llm" if attempt == 0 else "repair"
         notes = []
         if attempt > 0:
-            notes.append(f"JSON hop le sau {attempt} lan repair.")
+            notes.append(f"JSON hợp lệ sau {attempt} lần repair.")
         notes.extend(list(parsed.parse_notes or []))
         return ParseResult(
             parsed=parsed,
@@ -1480,7 +1480,7 @@ def parse_with_llm(question_text, as_of, calendar, rulebook, products, customers
         )
 
     # Hết repair hoặc backend lỗi: fallback, không đoán thêm.
-    fallback_notes = ["LLM khong tra duoc JSON hop le sau toi da 2 lan repair: " + " ".join(errors)]
+    fallback_notes = ["LLM không trả được JSON hợp lệ sau tối đa 2 lần repair: " + " ".join(errors)]
     if template_parse_fn is not None:
         try:
             parsed = template_parse_fn(
@@ -1490,7 +1490,7 @@ def parse_with_llm(question_text, as_of, calendar, rulebook, products, customers
                 parsed=parsed,
                 source="template_fallback",
                 confidence=float(getattr(parsed, "confidence_parse", 0.0) or 0.0),
-                notes=fallback_notes + ["Fallback ve parser template."]
+                notes=fallback_notes + ["Fallback về parser template."]
                 + list(getattr(parsed, "parse_notes", []) or []),
             )
         except Exception as exc:
@@ -1498,7 +1498,7 @@ def parse_with_llm(question_text, as_of, calendar, rulebook, products, customers
                 parsed=_unknown_parsed(normalized_text),
                 source="template_fallback",
                 confidence=0.0,
-                notes=fallback_notes + [f"Parser template cung loi: {exc}."],
+                notes=fallback_notes + [f"Parser template cũng lỗi: {exc}."],
             )
     return _fallback_result(
         question_text, as_of, calendar, rulebook, products, customers,

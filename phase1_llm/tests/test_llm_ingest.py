@@ -174,11 +174,11 @@ def _yeu_cau(testcase, *ten_doi_tuong):
     for doi_tuong in ten_doi_tuong:
         if doi_tuong is None:
             testcase.skipTest(
-                "llm_ingest chua co ham/class contract tuong ung "
-                "(Child 1 chua xong) - skip cho ro rang, khong fail gia"
+                "llm_ingest chưa có hàm/class contract tương ứng "
+                "(Child 1 chưa xong) - skip cho rõ ràng, không fail giả"
             )
     if _pd is None:
-        testcase.skipTest("pandas chua cai - khong dung duoc DataFrame gia")
+        testcase.skipTest("pandas chưa cài - không dùng được DataFrame giả")
 
 
 def _role_cua(ket_qua):
@@ -300,7 +300,7 @@ def _df_don_hang_gia():
 def _yeu_cau_pandas():
     """Raise SkipTest nếu pandas chưa có (test cần DataFrame giả)."""
     if _pd is None:
-        raise unittest.SkipTest("pandas chua cai - khong dung duoc DataFrame gia")
+        raise unittest.SkipTest("pandas chưa cài - không dùng được DataFrame giả")
 
 
 def _sample_rows_cua(df):
@@ -369,7 +369,7 @@ class BackendLoi(BackendGia):
 
     def __init__(self):
         """Khởi tạo với một exception duy nhất, lặp lại mọi lần gọi."""
-        super().__init__([RuntimeError("khong tai duoc model")])
+        super().__init__([RuntimeError("không tải được model")])
 
 
 class TestContractSemantics(unittest.TestCase):
@@ -382,7 +382,7 @@ class TestContractSemantics(unittest.TestCase):
         chiếu, không phải hành vi của llm_ingest.
         """
         if _COLUMN_SYNONYMS is None:
-            self.skipTest("phase1/src/ingest.py chua import duoc")
+            self.skipTest("phase1/src/ingest.py chưa import được")
         self.assertEqual(len(_SEMANTICS_37), 37)
         self.assertEqual(sorted(_SEMANTICS_37), sorted(_COLUMN_SYNONYMS.keys()))
 
@@ -679,10 +679,10 @@ class TestRunLlmIngestForShop(unittest.TestCase):
         ket_qua = run_llm_ingest_for_shop(shop, "", backend=BackendLoi())
         sources = _lay_truong(ket_qua, "sources", {})
         self.assertIsInstance(sources, dict)
-        self.assertTrue(sources, "sources khong duoc rong khi co bang can xu ly")
+        self.assertTrue(sources, "sources không được rỗng khi có bảng cần xử lý")
         for bang, nguon in sources.items():
             self.assertEqual(nguon, "rule_fallback",
-                             f"bang {bang} phai fallback khi backend loi")
+                             f"bảng {bang} phải fallback khi backend lỗi")
         fallback_count = _lay_truong(ket_qua, "fallback_count", None)
         if fallback_count is not None:
             self.assertGreater(fallback_count, 0)
@@ -777,7 +777,7 @@ class TestVietnameseDocstringsAst(unittest.TestCase):
         """
         module_path = _LLM_DIR / "src" / "llm_ingest.py"
         if not module_path.exists():
-            self.skipTest("src/llm_ingest.py chua ton tai (Child 1 chua xong)")
+            self.skipTest("src/llm_ingest.py chưa tồn tại (Child 1 chưa xong)")
         tree = ast.parse(module_path.read_text(encoding="utf-8"))
         vietnamese_chars = set(
             "àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợ"
@@ -802,7 +802,7 @@ class TestVietnameseDocstringsAst(unittest.TestCase):
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if not node.name.startswith("_"):
                     _check(f"function {node.name}", node)
-        self.assertEqual(missing, [], f"Thieu docstring tieng Viet: {missing}")
+        self.assertEqual(missing, [], f"Thiếu docstring tiếng Việt: {missing}")
         self.assertGreaterEqual(len(checked), 10)
         for ten_bat_buoc in (
             "function build_table_prompt",

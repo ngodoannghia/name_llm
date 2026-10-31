@@ -1362,12 +1362,12 @@ def parse_question(question_text: str, as_of: datetime.date, calendar,
         if not is_exact:
             confidence -= 0.2
             notes.append(
-                "Khop ten rut gon (khong phai ten day du), do chac giam."
+                "Khớp tên rút gọn (không phải tên đầy đủ), độ chắc giảm."
             )
         if ambiguous:
             confidence -= 0.15
             notes.append(
-                "Nhieu thuc the cung khop doan ten nay, chua phan biet duoc."
+                "Nhiều thực thể cùng khớp đoạn tên này, chưa phân biệt được."
             )
     masked_text = " ".join(masked_tokens)
 
@@ -1433,7 +1433,7 @@ def parse_question(question_text: str, as_of: datetime.date, calendar,
     has_ranking = ranking_k is not None
     if has_ranking and ranking_target == "none":
         confidence -= 0.2
-        notes.append("Co tu 'nhat'/'top' nhung chua xac dinh duoc xep hang cai gi.")
+        notes.append("Có từ 'nhất'/'top' nhưng chưa xác định được xếp hạng cái gì.")
 
     # --- Bước 5: giải kỳ. ---
     period_start, period_end, period_kind, period_months = parse_time(
@@ -1441,7 +1441,7 @@ def parse_question(question_text: str, as_of: datetime.date, calendar,
     )
     if period_kind == "none":
         confidence -= 0.3
-        notes.append("Khong giai duoc ky thoi gian trong cau hoi.")
+        notes.append("Không giải được kỳ thời gian trong câu hỏi.")
     # Kỳ suy năm (tháng/ngày không ghi năm) là suy luận có luật nhưng
     # vẫn kém chắc hơn kỳ ghi rõ năm: ghi chú, giảm nhẹ.
     if period_kind in ("absolute", "relative") and re.search(
@@ -1451,7 +1451,7 @@ def parse_question(question_text: str, as_of: datetime.date, calendar,
         # đã parse thành công (tránh ghi chú thừa cho câu tháng nay).
         if "thang nay" not in normalized and "thang truoc" not in normalized:
             confidence -= 0.1
-            notes.append("Thang khong ghi nam, suy nam theo as_of (luat rulebook).")
+            notes.append("Tháng không ghi năm, suy năm theo as_of (luật rulebook).")
 
     # --- Bước 6: ngưỡng tiền (cho câu đếm đơn theo doanh thu). ---
     threshold_money, threshold_op = _extract_threshold(masked_text)
@@ -1579,7 +1579,7 @@ def parse_question(question_text: str, as_of: datetime.date, calendar,
         # Giá bán không gắn ngày đơn lẻ: vẫn là price_on_day nếu câu
         # hỏi giá tại một thời điểm, nhưng kém chắc hơn -> ghi chú.
         measure = "price_on_day"
-        notes.append("Cau gia ban nhung ky khong phai mot ngay don le.")
+        notes.append("Câu giá bán nhưng kỳ không phải một ngày đơn lẻ.")
         confidence -= 0.1
     # 7l. Doanh thu (chung, kể cả doanh thu của sản phẩm/khách cụ thể).
     elif (
@@ -1659,7 +1659,7 @@ def parse_question(question_text: str, as_of: datetime.date, calendar,
     # --- Bước 10: chốt confidence và notes cho trường hợp unknown. ---
     if measure == "unknown":
         confidence = min(confidence, 0.3)
-        notes.append("Khong nhan dien duoc measure, can abstain thay vi doan.")
+        notes.append("Không nhận diện được measure, cần abstain thay vì đoán.")
     if matched is None and measure in ("revenue", "quantity", "price_on_day"):
         # Câu nêu "san pham"/"mat hang" chung chung thì không cần thực
         # thể cụ thể; chỉ giảm khi câu dường như nhắc một tên riêng mà

@@ -288,7 +288,7 @@ def main() -> int:
     paths = resolve_train_paths(Path(args.train_dir))
 
     # Bước 1: nạp rulebook + calendar của split đang chạy.
-    print("[1/4] Nap rulebook...", flush=True)
+    print("[1/4] Nạp rulebook...", flush=True)
     rulebook = load_rulebook(str(paths["rulebook"]), str(paths["calendar"]))
     calendar = load_calendar(str(paths["calendar"]))
     rulebook_info = {
@@ -304,16 +304,16 @@ def main() -> int:
         "unparsed_notes": list(rulebook.unparsed_notes),
     }
     print(
-        f"  Rulebook: {rulebook_info['rules_count']} luat, "
-        f"loai don huy={rulebook_info['revenue_excludes_cancelled']}, "
-        f"loai don tra={rulebook_info['revenue_excludes_returned']}, "
-        f"tuan bat dau thu Hai={rulebook_info['week_starts_monday']}, "
-        f"calendar {rulebook_info['calendar_rows']} dong.",
+        f"  Rulebook: {rulebook_info['rules_count']} luật, "
+        f"loại đơn huỷ={rulebook_info['revenue_excludes_cancelled']}, "
+        f"loại đơn trả={rulebook_info['revenue_excludes_returned']}, "
+        f"tuần bắt đầu thứ Hai={rulebook_info['week_starts_monday']}, "
+        f"calendar {rulebook_info['calendar_rows']} dòng.",
         flush=True,
     )
 
     # Bước 2: ingest từng shop.
-    print("[2/4] Ingest tung shop...", flush=True)
+    print("[2/4] Ingest từng shop...", flush=True)
     ingest_reports = run_ingest_all(paths["data_dir"])
     ok_shops = [r for r in ingest_reports if r["status"] == "ok"]
     error_shops = [r for r in ingest_reports if r["status"] != "ok"]
@@ -321,20 +321,20 @@ def main() -> int:
     total_out = sum(r["rows_out"] for r in ingest_reports)
     print(
         f"  Ingest: {len(ok_shops)}/{len(ingest_reports)} shop ok, "
-        f"{len(error_shops)} shop loi, tong dong vao={total_in}, ra={total_out}.",
+        f"{len(error_shops)} shop lỗi, tổng dòng vào={total_in}, ra={total_out}.",
         flush=True,
     )
     for report in ingest_reports:
         print(
             f"    {report['business_id']}: {report['status']}, "
-            f"{report['rows_in']} -> {report['rows_out']} dong, "
+            f"{report['rows_in']} -> {report['rows_out']} dòng, "
             f"{report['elapsed_seconds']}s"
-            + (f", LOI: {report['error']}" if report["error"] else ""),
+            + (f", LỖI: {report['error']}" if report["error"] else ""),
             flush=True,
         )
 
     # Bước 3: chấm 3 submission mẫu.
-    print("[3/4] Cham 3 submission mau...", flush=True)
+    print("[3/4] Chấm 3 submission mẫu...", flush=True)
     evaluation = run_evaluation_samples(paths)
     for name, result in evaluation.items():
         print(
@@ -347,9 +347,9 @@ def main() -> int:
     # Bước 4: chạy tests (trừ khi người dùng yêu cầu bỏ qua).
     if args.skip_tests:
         tests_result = {"exit_code": None, "tests_ran": None, "ok": None, "output_tail": "skipped by --skip-tests"}
-        print("[4/4] Bo qua tests theo --skip-tests.", flush=True)
+        print("[4/4] Bỏ qua tests theo --skip-tests.", flush=True)
     else:
-        print("[4/4] Chay unittest...", flush=True)
+        print("[4/4] Chạy unittest...", flush=True)
         tests_result = run_tests(phase1_dir)
         print(
             f"  Tests: exit_code={tests_result['exit_code']}, "
@@ -378,7 +378,7 @@ def main() -> int:
     with open(reports_dir / "tests_output.txt", "w", encoding="utf-8") as handle:
         handle.write(tests_result["output_tail"] or "")
 
-    print(f"Bao cao JSON: {reports_dir / 'phase1_summary.json'}", flush=True)
+    print(f"Báo cáo JSON: {reports_dir / 'phase1_summary.json'}", flush=True)
     # Exit code phản ánh đúng trạng thái: có shop lỗi hoặc test fail thì khác 0.
     if error_shops or (not args.skip_tests and tests_result["exit_code"] != 0):
         return 1

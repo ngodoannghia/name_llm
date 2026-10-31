@@ -289,8 +289,8 @@ def resolve_data_dir(train_dir):
     ):
         return train_dir
     raise FileNotFoundError(
-        f"Khong tim thay thu muc du lieu shop trong '{train_dir}' "
-        "(can 'data/' hoac truc tiep cac thu muc 'biz_*')."
+        f"Không tìm thấy thư mục dữ liệu shop trong '{train_dir}' "
+        "(cần 'data/' hoặc trực tiếp các thư mục 'biz_*')."
     )
 
 
@@ -596,7 +596,7 @@ def process_shop(business_id, data_dir, baseline_entry, backend=None):
             "sources": {},
             "table_roles": {},
             "profile_delta": {},
-            "warnings": [f"load_shop loi: {exc!r}"],
+            "warnings": [f"load_shop lỗi: {exc!r}"],
             "readme_found": False,
             "readme_truncated": False,
             "elapsed_seconds": round(time.perf_counter() - started, 2),
@@ -619,8 +619,8 @@ def process_shop(business_id, data_dir, baseline_entry, backend=None):
         )
     else:
         warnings.append(
-            "Khong co baseline phase1 cho shop nay, bo qua so sanh "
-            "rows/mapped voi baseline."
+            "Không có baseline phase1 cho shop này, bỏ qua so sánh "
+            "rows/mapped với baseline."
         )
     profile_mapped_count = sum(
         1 for value in (getattr(profile, "columns_mapped", None) or {}).values()
@@ -634,11 +634,11 @@ def process_shop(business_id, data_dir, baseline_entry, backend=None):
         data_dir, business_id
     )
     if not readme_found:
-        warnings.append("Shop khong co file README.md.")
+        warnings.append("Shop không có file README.md.")
     if readme_truncated:
         warnings.append(
-            f"README dai hon {README_MAX_CHARS} ky tu, chi lay "
-            f"{README_MAX_CHARS} ky tu dau theo contract."
+            f"README dài hơn {README_MAX_CHARS} ký tự, chỉ lấy "
+            f"{README_MAX_CHARS} ký tự đầu theo contract."
         )
 
     llm_added_raw = {}
@@ -663,8 +663,8 @@ def process_shop(business_id, data_dir, baseline_entry, backend=None):
                             (getattr(llm_result, "warnings", None) or [])]
         except Exception as exc:  # noqa: BLE001 - LLM lỗi thì fallback
             warnings.append(
-                f"run_llm_ingest_for_shop loi, fallback rule-based "
-                f"toan shop: {exc!r}"
+                f"run_llm_ingest_for_shop lỗi, fallback rule-based "
+                f"toàn shop: {exc!r}"
             )
             llm_added_raw = {}
             llm_rejected = []
@@ -677,8 +677,8 @@ def process_shop(business_id, data_dir, baseline_entry, backend=None):
         # rule-based, không crash, không map LLM nào được áp dụng.
         if _LLM_IMPORT_ERROR is not None and _REAL_LLM_FN is None:
             warnings.append(
-                "Module llm_ingest chua ton tai hoac import loi "
-                f"({_LLM_IMPORT_ERROR}), toan shop fallback rule-based."
+                "Module llm_ingest chưa tồn tại hoặc import lỗi "
+                f"({_LLM_IMPORT_ERROR}), toàn shop fallback rule-based."
             )
         llm_sources = {name: "rule_fallback" for name in table_names}
         llm_fallback_count = len(table_names)
@@ -691,8 +691,8 @@ def process_shop(business_id, data_dir, baseline_entry, backend=None):
             rule_mappings[table_name] = dict(map_columns(tables[table_name]))
         except Exception as exc:  # noqa: BLE001 - bảng lỗi thì map rỗng
             warnings.append(
-                f"Bang '{table_name}': map_columns loi ({exc!r}), "
-                "coi nhu khong map duoc cot nao."
+                f"Bảng '{table_name}': map_columns lỗi ({exc!r}), "
+                "coi như không map được cột nào."
             )
             rule_mappings[table_name] = {}
     applied, runner_rejected = verify_llm_mappings(
@@ -700,8 +700,8 @@ def process_shop(business_id, data_dir, baseline_entry, backend=None):
     )
     for item in runner_rejected:
         warnings.append(
-            "Loai map LLM chua kiem chung: bang '{table}', semantic "
-            "'{semantic}', cot '{column}' ({reason}).".format(**item)
+            "Loại map LLM chưa kiểm chứng: bảng '{table}', semantic "
+            "'{semantic}', cột '{column}' ({reason}).".format(**item)
         )
     # Map LLM mà module đã loại: chuẩn hoá về cùng dạng rejected để
     # báo cáo đếm được, giữ nguyên lý do của module khi có.
@@ -733,9 +733,9 @@ def process_shop(business_id, data_dir, baseline_entry, backend=None):
                     or column not in df_columns:
                 unverified_leaked += 1
                 warnings.append(
-                    "KIEM TOAN LOI: map chua kiem chung lot vao ket "
-                    f"qua: bang '{table_name}', semantic '{semantic}', "
-                    f"cot '{column}'."
+                    "KIỂM TOÁN LỖI: map chưa kiểm chứng lọt vào kết "
+                    f"quả: bảng '{table_name}', semantic '{semantic}', "
+                    f"cột '{column}'."
                 )
 
     merged_mappings = {}
@@ -761,20 +761,20 @@ def process_shop(business_id, data_dir, baseline_entry, backend=None):
             rows_diff_reason = None
         else:
             rows_diff_reason = (
-                "rows khac baseline: baseline "
+                "rows khác baseline: baseline "
                 f"(rows_in={baseline_rows[0]}, rows_out={baseline_rows[1]}) "
                 f"vs lan chay nay (rows_in={rows_in}, rows_out={rows_out}); "
-                "runner khong chay lai forward-fill/dedup/hop nhat/parse "
-                "tien-ngay nen chenh lech nay phan anh baseline duoc ghi "
-                "tu lan chay khac (du lieu hoac code phase1 khac luc ghi "
-                "baseline), khong phai do LLM; can Child 3 doi chieu "
-                "sha256 phase1 trong summary truoc khi ket luan."
+                "runner không chạy lại forward-fill/dedup/hợp nhất/parse "
+                "tiền-ngày nên chênh lệch này phản ánh baseline được ghi "
+                "từ lần chạy khác (dữ liệu hoặc code phase1 khác lúc ghi "
+                "baseline), không phải do LLM; cần Child 3 đối chiếu "
+                "sha256 phase1 trong summary trước khi kết luận."
             )
             warnings.append(rows_diff_reason)
     else:
         rows_match = True
         rows_diff_reason = (
-            "Khong co baseline de so sanh rows (baseline thieu shop nay)."
+            "Không có baseline để so sánh rows (baseline thiếu shop này)."
         )
 
     for item in llm_warnings:
@@ -785,7 +785,7 @@ def process_shop(business_id, data_dir, baseline_entry, backend=None):
         "business_id": business_id,
         "status": "error" if unverified_leaked else "ok",
         "error": (
-            f"{unverified_leaked} map chua kiem chung lot vao ket qua"
+            f"{unverified_leaked} map chưa kiểm chứng lọt vào kết quả"
             if unverified_leaked else None
         ),
         "tables": table_names,
@@ -849,8 +849,8 @@ def run_phase1_llm(train_dir, shops=None, limit_shops=None, output_path=None,
     baseline = load_baseline()
     if not baseline:
         baseline_note = (
-            "Khong doc duoc phase1/reports/phase1_summary.json, "
-            "so sanh baseline bi bo qua."
+            "Không đọc được phase1/reports/phase1_summary.json, "
+            "so sánh baseline bị bỏ qua."
         )
     else:
         baseline_note = None

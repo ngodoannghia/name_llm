@@ -45,7 +45,7 @@ def _template_result():
     parsed = SimpleNamespace(measure="revenue", confidence_parse=0.7)
     return SimpleNamespace(
         parsed=parsed, source="template_fallback", confidence=0.7,
-        notes=["Fallback ve parser template."])
+        notes=["Fallback về parser template."])
 
 
 class TestLlmFirstFallback(unittest.TestCase):
@@ -101,7 +101,7 @@ class TestLlmFirstFallback(unittest.TestCase):
 
         def fake_llm(*args, **kwargs):
             calls["llm"] += 1
-            raise RuntimeError("OpenAI Responses API tra loi HTTP 401")
+            raise RuntimeError("OpenAI Responses API trả lời HTTP 401")
 
         def fake_template(*args, reason=None, **kwargs):
             calls["template"] += 1
