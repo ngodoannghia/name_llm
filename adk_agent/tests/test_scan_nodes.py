@@ -16,6 +16,7 @@ import pytest
 from ingest._config import IngestConfig
 from ingest.nodes._scan_nodes import (
     branch_input,
+    deterministic_merge_groups,
     header_gate,
     make_init_shop,
     make_scan_sheets,
@@ -156,3 +157,89 @@ def test_merge_gate_skip_and_agent() -> None:
   event = merge_gate(two)
   assert event.actions.route == "agent"
   assert len(event.actions.state_delta["merge_groups"]["groups"]) == 2
+
+
+def test_deterministic_merge_groups_same_signature() -> None:
+  """Cùng chữ ký chuẩn hóa thì khóa thành một nhóm, kể cả khác thứ tự cột."""
+  tables = [
+      {"table_id": "t01", "column_signature": "ma|ngay|tien", "row_count": 10},
+      {"table_id": "t02", "column_signature": "tien|ma|ngay", "row_count": 12},
+      {"table_id": "t03", "column_signature": "ma|ngay|tien", "row_count": 9},
+      {"table_id": "khac", "column_signature": "ten|tuoi", "row_count": 5},
+  ]
+  locked = deterministic_merge_groups(tables)
+  assert locked == [
+      {
+          "tables": ["t01", "t02", "t03"],
+          "evidence": "gộp khóa bởi code: cùng chữ ký cột chuẩn hóa",
+      }
+  ]
+
+
+def test_deterministic_merge_groups_empty_signature_no_lock() -> None:
+  """Chữ ký rỗng (header chưa xác định) thì không bao giờ khóa."""
+  tables = [
+      {"table_id": "a", "column_signature": "", "row_count": 10},
+      {"table_id": "b", "column_signature": "", "row_count": 12},
+  ]
+  assert deterministic_merge_groups(tables) == []
+
+
+def test_deterministic_merge_groups_lot_variant_no_lock() -> None:
+  """Nhóm chứa cả bảng lẫn biến thể lô thì không khóa (tránh đếm trùng)."""
+  tables = [
+      {"table_id": "chitiet", "column_signature": "ma|so_luong", "row_count": 10},
+      {"table_id": "chitietlo", "column_signature": "ma|so_luong", "row_count": 12},
+  ]
+  assert deterministic_merge_groups(tables) == []
+
+
+def test_deterministic_merge_groups_sqlite_no_lock() -> None:
+  """Shop SQLite thì không khóa bảng nào (mỗi bảng là một thực thể riêng)."""
+  tables = [
+      {"table_id": "don", "column_signature": "ma|tien", "row_count": 10},
+      {"table_id": "don_2", "column_signature": "ma|tien", "row_count": 12},
+  ]
+  assert deterministic_merge_groups(tables, "sqlite") == []
+
+
+def test_merge_gate_locked_groups_skip_when_one_unlocked() -> None:
+  """Gate khóa nhóm cùng chữ ký, chỉ còn 1 bảng chưa khóa thì skip agent."""
+  tables = [
+      {"table_id": "t01", "column_signature": "ma|ngay", "row_count": 10},
+      {"table_id": "t02", "column_signature": "ma|ngay", "row_count": 12},
+      {"table_id": "quydoi", "column_signature": "ten|ty_le", "row_count": 5},
+  ]
+  event = merge_gate(tables)
+  assert event.actions.route == "skip"
+  state = event.actions.state_delta
+  assert state["merge_locked_groups"] == [
+      {
+          "tables": ["t01", "t02"],
+          "evidence": "gộp khóa bởi code: cùng chữ ký cột chuẩn hóa",
+      }
+  ]
+  assert state["merge_groups"]["groups"] == [
+      {
+          "tables": ["t01", "t02"],
+          "evidence": "gộp khóa bởi code: cùng chữ ký cột chuẩn hóa",
+      },
+      {"tables": ["quydoi"], "evidence": "giữ riêng mặc định"},
+  ]
+  # Tóm tắt cho agent chỉ chứa bảng chưa khóa, không chứa nhóm đã khóa.
+  assert "quydoi" in event.output
+  assert "t01" not in event.output
+
+
+def test_merge_gate_agent_only_for_unlocked() -> None:
+  """Gate route agent khi còn hơn 1 bảng chưa khóa, tóm tắt chỉ có bảng chưa khóa."""
+  tables = [
+      {"table_id": "t01", "column_signature": "ma|ngay", "row_count": 10},
+      {"table_id": "t02", "column_signature": "ma|ngay", "row_count": 12},
+      {"table_id": "a", "column_signature": "ten", "row_count": 5},
+      {"table_id": "b", "column_signature": "tuoi", "row_count": 6},
+  ]
+  event = merge_gate(tables)
+  assert event.actions.route == "agent"
+  assert "a" in event.output and "b" in event.output
+  assert "t01" not in event.output and "t02" not in event.output

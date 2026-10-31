@@ -392,3 +392,45 @@ def test_validate_schema_table_ignores_unmeasured_date_range() -> None:
       schema_table_results=[],
   )
   assert event.output["status"] == "ok"
+
+
+def test_validate_merge_with_locked_combines() -> None:
+  """Validator gộp tiếp nhóm khóa với phần agent đạt, chỉ kiểm phần agent."""
+  locked = [{"tables": ["don", "don_2"], "evidence": "gộp khóa bởi code"}]
+  proposal = MergeProposal(groups=[], singles=["chitiet", "chitietlo"])
+  event = validate_merge(proposal, RAW, locked)
+  assert event.output["status"] == "ok"
+  combined = event.actions.state_delta["merge_groups"]
+  assert combined["groups"] == locked
+  assert combined["singles"] == ["chitiet", "chitietlo"]
+
+
+def test_validate_merge_proposal_locked_id_fails() -> None:
+  """Đề xuất nhắc tới bảng đã khóa thì bị bác (agent không được quyết lại)."""
+  locked = [{"tables": ["don", "don_2"], "evidence": "gộp khóa bởi code"}]
+  proposal = MergeProposal(
+      groups=[MergeGroup(tables=["don"], evidence="quyết lại")],
+      singles=["chitiet", "chitietlo"],
+  )
+  event = validate_merge(proposal, RAW, locked)
+  assert event.output["status"] == "fail"
+  assert "khóa" in event.output["reason"]
+
+
+def test_validate_merge_missing_unlocked_fails() -> None:
+  """Đề xuất sót bảng chưa khóa thì bị bác."""
+  locked = [{"tables": ["don", "don_2"], "evidence": "gộp khóa bởi code"}]
+  proposal = MergeProposal(groups=[], singles=["chitiet"])
+  event = validate_merge(proposal, RAW, locked)
+  assert event.output["status"] == "fail"
+  assert "chitietlo" in event.output["reason"]
+
+
+def test_mark_merge_fallback_keeps_locked() -> None:
+  """Fallback giữ nhóm khóa, chỉ bảng chưa khóa mới rơi về giữ riêng."""
+  locked = [{"tables": ["don", "don_2"], "evidence": "gộp khóa bởi code"}]
+  event = mark_merge_fallback(RAW, locked)
+  assert event.actions.state_delta["merge_fallback"] is True
+  groups = event.actions.state_delta["merge_groups"]["groups"]
+  assert groups[0] == locked[0]
+  assert [g["tables"] for g in groups[1:]] == [["chitiet"], ["chitietlo"]]

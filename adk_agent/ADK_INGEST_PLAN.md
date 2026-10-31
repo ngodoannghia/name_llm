@@ -357,15 +357,22 @@ N2  header_loop ↺ [LLM + code]
       không dừng cả shop vì một bảng.
   │
   ▼
-N3  merge_loop ↺ [LLM + code]
-    • MergeAgent [LLM]: nạp skill datamate-merge, đề xuất nhóm gộp qua
+N3  merge_loop ↺ [code khóa trước, LLM sau, code kiểm]
+    • Nhóm khóa bởi code (chạy trước agent, từ 2026-11-01 sau lỗi
+      biz_102): các bảng không phải SQLite có cùng chữ ký cột chuẩn hóa
+      (cùng bộ cột, không kể thứ tự) thì code gộp luôn thành một nhóm —
+      quy tắc của người dùng: cùng header sau khi chuẩn hóa thì gộp.
+      Ngoại lệ không khóa: bảng SQLite, và nhóm chứa cả bảng lẫn biến
+      thể lô của nó (ChiTiet/ChiTietLo).
+    • MergeAgent [LLM]: chỉ nhận các bảng CHƯA khóa, đề xuất nhóm gộp qua
       output_schema MergeProposal {nhóm bảng, bằng chứng gộp, bảng giữ riêng}.
-    • MergeValidator [code]: kiểm từng nhóm — cùng chữ ký cột chuẩn hóa,
-      cùng vai trò, ID overlap không mâu thuẫn, ngày liên tục; kiểm riêng
-      trường hợp lot-detail bằng so sánh toàn bộ schema.
+    • MergeValidator [code]: kiểm phần đề xuất của agent trên tập bảng
+      chưa khóa — cùng chữ ký cột chuẩn hóa, không nhắc tới bảng đã khóa,
+      không gộp biến thể lô; rồi gộp tiếp với nhóm khóa thành merge_groups.
     • Sai → lỗi validator được đẩy lại cho MergeAgent viết lại.
-    • Đúng → ghi merge_groups vào state. Hết 3 lần vẫn sai → giữ mỗi sheet
-      là một bảng riêng (an toàn hơn gộp sai gây đếm trùng), ghi rõ vào log.
+    • Đúng → ghi merge_groups (nhóm khóa + đề xuất đạt) vào state.
+      Hết 3 lần vẫn sai → fallback GIỮ nhóm khóa, chỉ các bảng chưa khóa
+      mới giữ riêng (an toàn hơn gộp sai gây đếm trùng), ghi rõ vào log.
   │
   ▼
 N4  clean_tables [code, không LLM]

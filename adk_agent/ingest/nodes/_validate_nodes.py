@@ -167,12 +167,22 @@ def _lot_variant_name(table_id: str) -> str:
 def validate_merge(
     node_input: MergeProposal,
     raw_tables: list[dict] | None = None,
+    merge_locked_groups: list[dict] | None = None,
 ) -> Event:
-  """Kiểm chứng đề xuất gộp của MergeAgent.
+  """Kiểm chứng đề xuất gộp của MergeAgent, rồi gộp tiếp với nhóm khóa.
 
-  Quy tắc kiểm chứng:
-  - Mọi bảng quét phải xuất hiện đúng một lần trong đề xuất (nhóm hoặc
-    singles), không sót, không trùng.
+  MergeAgent chỉ nhận các bảng CHƯA khóa (nhóm khóa bởi code đã chốt
+  ở merge_gate và không nằm trong đầu vào của agent), nên validator
+  chỉ kiểm đề xuất trên tập bảng chưa khóa đó, rồi gộp kết quả đạt với
+  nhóm khóa thành merge_groups cuối. Nhóm khóa không đi qua validator:
+  nó là quyết định của code theo quy tắc "cùng chữ ký cột chuẩn hóa
+  thì gộp", không phải phỏng đoán của model.
+
+  Quy tắc kiểm chứng (chỉ áp dụng cho phần đề xuất của agent):
+  - Mọi bảng chưa khóa phải xuất hiện đúng một lần trong đề xuất (nhóm
+    hoặc singles), không sót, không trùng. Đề xuất nhắc tới bảng đã
+    khóa hoặc bảng không tồn tại đều bị bác (bảng đã khóa không nằm
+    trong đầu vào nên agent không được quyết lại nó).
   - Nhóm nhiều bảng chỉ đạt khi mọi bảng trong nhóm có cùng chữ ký cột
     (điều kiện cần; chữ ký khác nhau thì chắc chắn không cùng bảng logic).
   - Nhóm chứa đồng thời một bảng và biến thể lô của nó (ChiTiet +
@@ -183,12 +193,18 @@ def validate_merge(
   Args:
     node_input: Đề xuất gộp (đã coerce thành MergeProposal).
     raw_tables: Danh sách RawTable đã dump (lấy từ state).
+    merge_locked_groups: Nhóm đã khóa bởi code (lấy từ state, do
+      merge_gate ghi; None thì coi như không có nhóm khóa).
 
   Returns:
-    Một Event duy nhất mang Verdict và state (merge_groups khi đạt;
-    nhánh fail không ghi last_error — route node tự ghi).
+    Một Event duy nhất mang Verdict và state (merge_groups cuối gồm
+    nhóm khóa + đề xuất đạt khi ok; nhánh fail không ghi last_error —
+    route node tự ghi).
   """
   tables = {table["table_id"]: table for table in (raw_tables or [])}
+  locked = merge_locked_groups or []
+  locked_ids = {table_id for group in locked for table_id in group["tables"]}
+  unlocked_ids = set(tables) - locked_ids
   seen: list[str] = []
   for group in node_input.groups:
     if not group.tables:
@@ -197,6 +213,17 @@ def validate_merge(
           state={},
       )
     for table_id in group.tables:
+      if table_id in locked_ids:
+        return _verdict_event(
+            Verdict(
+                status="fail",
+                reason=(
+                    f"Bảng {table_id} đã nằm trong nhóm khóa bởi code nên "
+                    "agent không được quyết lại nó."
+                ),
+            ),
+            state={},
+        )
       if table_id not in tables:
         return _verdict_event(
             Verdict(
@@ -241,6 +268,17 @@ def validate_merge(
             state={},
         )
   for table_id in node_input.singles:
+    if table_id in locked_ids:
+      return _verdict_event(
+          Verdict(
+              status="fail",
+              reason=(
+                  f"Bảng {table_id} (giữ riêng) đã nằm trong nhóm khóa bởi "
+                  "code nên agent không được quyết lại nó."
+              ),
+          ),
+          state={},
+      )
     if table_id not in tables:
       return _verdict_event(
           Verdict(
@@ -258,18 +296,22 @@ def validate_merge(
           state={},
       )
     seen.append(table_id)
-  if set(seen) != set(tables):
-    missing = sorted(set(tables) - set(seen))
+  if set(seen) != unlocked_ids:
+    missing = sorted(unlocked_ids - set(seen))
     return _verdict_event(
         Verdict(
             status="fail",
-            reason=f"Đề xuất gộp còn sót bảng chưa phân nhóm: {missing}.",
+            reason=f"Đề xuất gộp còn sót bảng chưa khóa chưa phân nhóm: {missing}.",
         ),
         state={},
     )
+  combined = {
+      "groups": locked + node_input.model_dump()["groups"],
+      "singles": node_input.model_dump()["singles"],
+  }
   return _verdict_event(
       Verdict(status="ok", reason="Đề xuất gộp khớp dữ liệu quét."),
-      state={"merge_groups": node_input.model_dump(), "last_error": ""},
+      state={"merge_groups": combined, "last_error": ""},
   )
 
 
@@ -726,8 +768,19 @@ def mark_header_fallback(raw_tables: list[dict] | None = None) -> Event:
   )
 
 
-def mark_merge_fallback(raw_tables: list[dict] | None = None) -> Event:
-  """Ghi fallback gộp: giữ mỗi bảng riêng, không gộp gì cả.
+def mark_merge_fallback(
+    raw_tables: list[dict] | None = None,
+    merge_locked_groups: list[dict] | None = None,
+) -> Event:
+  """Ghi fallback gộp: giữ nhóm khóa bởi code, còn lại giữ riêng.
+
+  Khác với trước đây (fallback là không gộp gì cả), fallback mới VẪN
+  GIỮ nhóm khóa bởi code: nhóm khóa là quyết định của code theo quy
+  tắc "cùng chữ ký cột chuẩn hóa thì gộp", không phải phỏng đoán của
+  model nên không có lý do gì để hủy nó khi model sai. Chỉ các bảng
+  chưa khóa mới rơi về giữ riêng — đó mới là phần model quyết sai.
+  (Chính fallback cũ "không gộp gì cả" sẽ tái tạo lỗi biz_102 nếu
+  model lại đề xuất sai rồi hết lượt thử.)
 
   Không gộp an toàn hơn gộp sai: gộp sai gây đếm trùng, còn không gộp
   chỉ làm schema có nhiều bảng hơn (bước sinh SQL vẫn truy vấn được từng
@@ -735,16 +788,23 @@ def mark_merge_fallback(raw_tables: list[dict] | None = None) -> Event:
 
   Args:
     raw_tables: Danh sách RawTable đã dump (lấy từ state).
+    merge_locked_groups: Nhóm đã khóa bởi code (lấy từ state, do
+      merge_gate ghi; None thì coi như không có nhóm khóa).
 
   Returns:
     Một Event duy nhất mang output ghi nhận fallback và state
-    (merge_groups = mỗi bảng một nhóm, cờ merge_fallback).
+    (merge_groups = nhóm khóa + mỗi bảng chưa khóa một nhóm, cờ
+    merge_fallback).
   """
   tables = raw_tables or []
+  locked = merge_locked_groups or []
+  locked_ids = {table_id for group in locked for table_id in group["tables"]}
   groups = {
-      "groups": [
+      "groups": locked
+      + [
           {"tables": [table["table_id"]], "evidence": "giữ riêng fallback"}
           for table in tables
+          if table["table_id"] not in locked_ids
       ],
       "singles": [],
   }

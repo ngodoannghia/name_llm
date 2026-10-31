@@ -20,8 +20,10 @@ description: "Quyết định gộp các sheet thành một bảng logic trong i
 
 - Dùng ở node MergeAgent trong workflow ingest, sau khi header của các
   bảng đã chốt.
-- Đầu vào là danh sách các bảng đã quét (mỗi bảng có header chốt, mẫu,
-  thống kê: số dòng, distinct ID, khoảng ngày) và README của shop nếu có.
+- Đầu vào là danh sách các bảng CHƯA khóa (mỗi bảng có table_id, chữ ký
+  cột đã chuẩn hóa và số dòng). Đầu vào KHÔNG có mẫu dòng, distinct ID
+  hay khoảng ngày — đừng bịa các số liệu đó làm evidence, chỉ nêu bằng
+  chứng thật sự nhìn thấy trong đầu vào.
 - Skill này chỉ quyết định **nhóm gộp và bảng giữ riêng**, không làm
   sạch dữ liệu, không đổi header, không viết schema.
 
@@ -35,6 +37,30 @@ description: "Quyết định gộp các sheet thành một bảng logic trong i
 - Quyết định cho shop mới phải từ dữ liệu của chính shop đó, không suy
   từ shop khác, không hard-code theo business_id hay tên sheet của
   split train.
+
+## Nhóm khóa bởi code — agent không quyết lại
+
+Trước khi tới agent, code đã khóa sẵn một loại nhóm không cần phán đoán:
+các bảng (không phải SQLite) có cùng chữ ký cột chuẩn hóa — tức cùng bộ
+cột sau khi chuẩn hóa, không kể thứ tự cột — được gộp thành một nhóm
+(Bài học biz_102 2026-10-31: 18 sheet tháng cùng header mà agent gộp
+cặp theo số tháng, validator chỉ kiểm hình thức nên không bắt được.
+Quy tắc của người dùng: cùng header sau khi chuẩn hóa thì gộp, code
+quyết luôn). Nhóm khóa không nằm trong đầu vào của agent và đã chốt:
+agent không nhắc tới, không tách lại, không gộp thêm vào chúng.
+
+Hai ngoại lệ của khóa bởi code (code cũng không khóa, để agent quyết):
+bảng SQLite (mỗi bảng trong DB là một thực thể riêng), và nhóm nào chứa
+cả bảng lẫn biến thể lô của nó (ChiTiet/ChiTietLo — gộp sẽ đếm trùng).
+
+## Quy tắc lát cắt thời gian
+
+Mọi lát cắt thời gian của cùng một bảng logic (các sheet tháng, các file
+tách theo năm) phải thành MỘT nhóm duy nhất. Không bao giờ gộp cặp theo
+số tháng/năm giống nhau: tháng 1 năm 2025 với tháng 1 năm 2026 là hai
+lát cắt khác nhau của cùng một bảng, phải nằm chung một nhóm với mọi
+tháng khác — tách chúng thành cặp riêng là sai (đúng lỗi đã xảy ra ở
+biz_102).
 
 ## Làm theo từng bước
 

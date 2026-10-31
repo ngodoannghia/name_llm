@@ -460,7 +460,8 @@ workflow (xem §2 nguyên tắc 4 và plan §2.4 mục 3).
 | `readme_text` | `init_shop` | SchemaAgent (qua instruction `{readme_text?}`) | Đã cắt 4000 ký tự ở node quét, không đưa cả file vào state |
 | `raw_tables` | `scan_sheets` / `scan_sqlite` | HeaderAgent, MergeAgent | List `RawTable` đã dump thành dict (JSON-safe) |
 | `headers_final` | `validate_header` (qua route `"ok"`) | MergeAgent, clean_tables | Dict bảng -> header chốt |
-| `merge_groups` | `validate_merge` (qua route `"ok"`) | clean_tables | List nhóm gộp chốt |
+| `merge_groups` | `merge_gate` (mặc định), `validate_merge` (qua route `"ok"`), `mark_merge_fallback` | clean_tables | Nhóm gộp chốt = nhóm khóa bởi code + phần agent đạt (hoặc nhóm khóa + giữ riêng khi fallback) |
+| `merge_locked_groups` | `merge_gate` | `validate_merge`, `mark_merge_fallback` | Nhóm khóa bởi code: các bảng không phải SQLite có cùng chữ ký cột chuẩn hóa (cùng bộ cột, không kể thứ tự); ngoại lệ không khóa: bảng SQLite, nhóm chứa cả bảng lẫn biến thể lô. MergeAgent không nhận và không được quyết lại các bảng này |
 | `clean_stats` | `clean_tables` | `validate_shop`, `finalize_shop` | `CleanStats` đã dump |
 | `tmp_db_path`, `schema_path` | `write_sqlite_tmp`, `assemble_schema` | `validate_shop`, `publish_shop` | Đường dẫn tạm, chưa phải DB chính thức |
 | `schema_table_drafts`, `schema_table_index`, `schema_table_results`, `schema_table_fallbacks`, `schema_table_draft_text` | `init_schema_tables`, `validate_schema_table`, `route_schema_table` | agent bảng, route bảng, `assemble_schema` | Trạng thái vòng lặp từng bảng |
