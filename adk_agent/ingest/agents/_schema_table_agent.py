@@ -42,8 +42,12 @@ không thêm cột, không bớt cột.
 Quy tắc bắt buộc:
 - Giữ nguyên mọi giá trị đã đo: table_id, original_names,
   source_sheets, sqlite_table, row_count, tên cột SQL, kiểu cột,
-  sample_values, distinct_count, distinct_values, nullable_rate và
-  date_range — không sửa các giá trị này, không bịa thêm mẫu hay cột.
+  sample_values, distinct_count, distinct_values, nullable_rate —
+  không sửa các giá trị này, không bịa thêm mẫu hay cột.
+- Riêng date_range: bản nháp để {} nghĩa là chưa đo được — giữ nguyên
+  {}, KHÔNG tự điền khoảng ngày từ dữ liệu mẫu (khoảng ngày tự điền
+  có thể sai và làm lệch bước trả lời về sau, ví dụ bảng đơn hàng
+  đoán 5 ngày trong khi dữ liệu thật kéo dài hơn một năm).
 - Chỉ bổ sung: description_vi cho bảng bằng tiếng Việt có dấu (bảng
   này mỗi dòng là gì), và cho mỗi cột description_vi (cột này là gì,
   đơn vị nếu có) cùng role_hint.

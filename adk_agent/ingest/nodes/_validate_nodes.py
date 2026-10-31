@@ -277,11 +277,16 @@ def _measured_mismatch(agent_table: dict, draft_table: dict) -> str:
   """So sánh các trường đã đo của bảng do agent viết với bản nháp.
 
   Chỉ so sánh trường đã đo (tên bảng/cột, kiểu, mẫu, distinct, số
-  dòng, khoảng ngày); mô tả và role_hint là phần agent bổ sung nên
-  không so sánh. Bản nháp lưu date_range dạng {} khi bảng không có
-  cột ngày, còn agent (qua TableSchema) luôn trả {"min": ..., "max":
-  ...} nên phải chuẩn hóa {} thành {"min": "", "max": ""} trước khi
-  so sánh, nếu không mọi bảng không có cột ngày đều bị bác oan.
+  dòng); mô tả và role_hint là phần agent bổ sung nên không so sánh.
+  Riêng date_range chỉ so sánh khi bản nháp đã đo được khoảng ngày
+  thật (khác rỗng): write_sqlite_tmp hiện chưa đo khoảng ngày nên
+  bản nháp luôn để {}, mà {} ở đây nghĩa là "chưa đo", không phải
+  "bảng này không có ngày". So sánh tuyệt đối với {} sẽ bác oan mọi
+  bảng mà agent tự điền khoảng ngày — đúng lỗi gặp ở test model thật
+  biz_123 (model điền khoảng ngày hợp lý rồi bị bác, điền lại y hệt,
+  rồi fallback). Khoảng ngày do agent tự điền không vào được file
+  schema vì assemble_schema sẽ ghi đè bằng khoảng ngày của bản nháp,
+  nên bỏ qua so sánh ở đây không làm lọt giá trị sai vào schema.
 
   So sánh với bản nháp tương đương kiểm chứng trực tiếp trên DB, vì
   bản nháp chính là kết quả đo từ DB tạm ở node write_sqlite_tmp
@@ -309,14 +314,16 @@ def _measured_mismatch(agent_table: dict, draft_table: dict) -> str:
           f"viết {agent_table.get(key)!r}."
       )
   draft_range = draft_table.get("date_range") or {}
-  if draft_range == {}:
-    draft_range = {"min": "", "max": ""}
-  if agent_table.get("date_range") != draft_range:
-    return (
-        f"Khoảng ngày của bảng {draft_table.get('sqlite_table')} bị sửa: "
-        f"bản nháp là {draft_range!r} nhưng agent viết "
-        f"{agent_table.get('date_range')!r}."
-    )
+  # Chỉ so sánh khi bản nháp đã đo được khoảng ngày thật: bản nháp {}
+  # nghĩa là chưa đo, không phải giá trị phải khớp (xem docstring).
+  if draft_range != {}:
+    agent_range = agent_table.get("date_range") or {}
+    if agent_range != draft_range:
+      return (
+          f"Khoảng ngày của bảng {draft_table.get('sqlite_table')} bị sửa: "
+          f"bản nháp là {draft_range!r} nhưng agent viết "
+          f"{agent_range!r}."
+      )
   agent_columns = agent_table.get("columns", [])
   draft_columns = draft_table.get("columns", [])
   if len(agent_columns) != len(draft_columns):

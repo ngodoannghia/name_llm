@@ -14,6 +14,7 @@ from ingest._models import Verdict
 from ingest.nodes._clean_nodes import make_clean_tables
 from ingest.nodes._sqlite_nodes import (
     finalize_shop,
+    make_assemble_schema,
     make_write_sqlite_tmp,
     publish_shop,
     shop_route,
@@ -141,3 +142,52 @@ def test_shop_route_and_publish_and_finalize(tmp_path: Path) -> None:
   assert failed_event.output["status"] == "failed"
   assert failed_event.output["db_path"] == ""
   assert failed_event.output["error"] == "schema sai"
+
+
+async def test_assemble_schema_uses_draft_date_range(tmp_path: Path) -> None:
+  """assemble_schema lấy date_range từ bản nháp, bỏ khoảng tự điền.
+
+  Bảng do agent viết có date_range tự điền (2025-01-01 đến
+  2025-01-05) trong khi bản nháp chưa đo ({}): file schema cuối phải
+  ghi khoảng rỗng (chưa biết), không ghi khoảng tự điền vì khoảng đó
+  có thể sai và làm lệch bước trả lời về sau.
+  """
+  assemble = make_assemble_schema(CONFIG)
+  result_table = {
+      "table_id": "don",
+      "original_names": ["don"],
+      "source_sheets": ["don"],
+      "sqlite_table": "don",
+      "row_count": 2,
+      "description_vi": "Bảng đơn.",
+      "columns": [
+          {
+              "original_name": "ma",
+              "sqlite_name": "ma",
+              "type": "TEXT",
+              "description_vi": "Mã đơn.",
+              "role_hint": "order_id",
+              "sample_values": ["DH1"],
+              "distinct_count": 2,
+              "distinct_values": ["DH1", "DH2"],
+              "nullable_rate": 0.0,
+          }
+      ],
+      "date_range": {"min": "2025-01-01", "max": "2025-01-05"},
+  }
+  draft_table = dict(result_table)
+  draft_table["description_vi"] = ""
+  draft_table["date_range"] = {}
+  event = await assemble(
+      business_id="biz_test",
+      output_dir=str(tmp_path),
+      shop_dir="",
+      schema_table_results=[result_table],
+      schema_meta={"join_hints": [], "notes": []},
+      schema_table_fallbacks=[],
+      schema_table_drafts=[draft_table],
+  )
+  assert event.output["status"] == "ok"
+  schema_path = Path(event.actions.state_delta["schema_path"])
+  parsed = json.loads(schema_path.read_text(encoding="utf-8"))
+  assert parsed["tables"][0]["date_range"] == {"min": "", "max": ""}

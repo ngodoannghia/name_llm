@@ -372,3 +372,23 @@ def test_mark_schema_meta_fallback() -> None:
       "notes": [],
   }
   assert event.actions.state_delta["schema_meta_fallback"] is True
+
+
+def test_validate_schema_table_ignores_unmeasured_date_range() -> None:
+  """validate_schema_table đạt khi agent tự điền date_range chưa đo.
+
+  Bản nháp date_range {} nghĩa là chưa đo, không phải giá trị phải
+  khớp: agent điền khoảng ngày (dù đúng hay sai) cũng không bị bác,
+  vì assemble_schema sẽ ghi đè bằng khoảng của bản nháp trước khi ghi
+  file nên khoảng tự điền không lọt vào schema.
+  """
+  draft = _draft_table()
+  table = _table_for_draft()
+  table.date_range = {"min": "2025-01-01", "max": "2025-01-05"}  # type: ignore[assignment]
+  event = validate_schema_table(
+      table,
+      schema_table_drafts=[draft],
+      schema_table_index=0,
+      schema_table_results=[],
+  )
+  assert event.output["status"] == "ok"

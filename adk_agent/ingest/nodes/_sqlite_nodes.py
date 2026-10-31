@@ -343,6 +343,7 @@ def make_assemble_schema(config: IngestConfig) -> Callable:
       schema_table_results: list[dict] | None = None,
       schema_meta: dict | None = None,
       schema_table_fallbacks: list[str] | None = None,
+      schema_table_drafts: list[dict] | None = None,
   ) -> Event:
     """Ráp file schema cuối từ kết quả từng bảng và phần meta.
 
@@ -363,6 +364,13 @@ def make_assemble_schema(config: IngestConfig) -> Callable:
         fallback).
       schema_table_fallbacks: Id các bảng fallback về bản nháp (lấy
         từ state, dùng để chú thích vào notes).
+      schema_table_drafts: Bản nháp các bảng (lấy từ state, dùng để
+        ghi đè date_range: khoảng ngày trong file schema chỉ được lấy
+        từ giá trị đã đo, không lấy khoảng ngày do agent tự điền —
+        khoảng ngày tự điền có thể sai nặng (ví dụ bảng đơn hàng đoán
+        5 ngày trong khi dữ liệu thật kéo dài hơn một năm) và sẽ làm
+        lệch bước trả lời về sau khi nó suy luận "ngoài khoảng dữ
+        liệu" từ trường này.
 
     Returns:
       Một Event duy nhất mang output Verdict (ok khi ghi được file,
@@ -396,12 +404,25 @@ def make_assemble_schema(config: IngestConfig) -> Callable:
             for entry in shop_path.iterdir()
             if entry.is_file() and entry.name.lower() != "readme.md"
         )
+    draft_ranges = {
+        draft.get("sqlite_table", ""): draft.get("date_range", {})
+        for draft in (schema_table_drafts or [])
+    }
+    final_tables = []
+    for table in results:
+      table = dict(table)
+      # Khoảng ngày chỉ lấy từ bản nháp đã đo; khi bản nháp chưa đo
+      # ({}), file schema ghi {} (chưa biết) thay vì khoảng ngày do
+      # agent tự điền — xem docstring của tham số schema_table_drafts.
+      if table.get("sqlite_table") in draft_ranges:
+        table["date_range"] = draft_ranges[table["sqlite_table"]]
+      final_tables.append(TableSchema(**table))
     schema = ShopSchema(
         business_id=business_id,
         source_files=source_files,
         generated_at=datetime.now(timezone.utc).isoformat(),
         model=config.model_id,
-        tables=[TableSchema(**table) for table in results],
+        tables=final_tables,
         join_hints=meta.get("join_hints", []),
         notes=notes,
     )
