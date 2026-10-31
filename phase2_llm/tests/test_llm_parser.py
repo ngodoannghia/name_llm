@@ -407,6 +407,37 @@ class TestPromptAndBackend(unittest.TestCase):
         self.assertNotIn("order_id", prompt)
         self.assertNotIn("line_amount", prompt)
 
+    def test_build_prompt_co_bang_quyet_dinh_best_day_va_price_on_day(self):
+        """Prompt tuning: phải có quy tắc best_day, price_on_day và cách tính confidence.
+
+        Đây là 2 mẫu đã abstain ở lần chạy biz_101 (best_day: template cũ
+        trả đúng, LLM abstain; price_on_day: cả template và LLM đều abstain).
+        Prompt mới phải chỉ rõ: best_day khi hỏi 'ngày nào nhiều tiền nhất',
+        price_on_day phải có period_start = period_end = ngày đó (không
+        snapshot), và không hạ confidence chỉ vì không thấy doanh số.
+        """
+        prompt = build_prompt(
+            "thang 5/2026 ngay nao cua hang ban dc nhieu tien nhat",
+            "thang 5/2026 ngay nao cua hang ban duoc nhieu tien nhat",
+            _AS_OF, _PRODUCTS, _CUSTOMERS,
+            ["Nước giải khát"], ["tiền mặt"],
+            "Tuan bat dau thu Hai.",
+        )
+        # Quy tắc best_day: ngày nào + nhiều tiền nhất, không phải revenue.
+        self.assertIn("best_day", prompt)
+        self.assertIn("ngày nào", prompt)
+        self.assertIn("ranking_target=day", prompt)
+        # Quy tắc price_on_day: đúng một ngày, không snapshot.
+        self.assertIn("price_on_day", prompt)
+        self.assertIn("period_start=period_end", prompt)
+        self.assertIn("KHÔNG dùng snapshot", prompt)
+        # Quy tắc confidence: không hạ chỉ vì không thấy dữ liệu dòng đơn.
+        self.assertIn("KHÔNG hạ confidence", prompt)
+        # Ví dụ parse minh họa phải có, nhưng không được chứa đáp án số thật.
+        self.assertIn("VÍ DỤ PARSE", prompt)
+        # Top product theo số lượng, không phải doanh thu.
+        self.assertIn("ranking_metric=quantity", prompt)
+
     def test_transformers_backend_bao_loi_ro_rang_khi_khong_kha_dung(self):
         """Ở môi trường không có transformers/weights, backend phải raise RuntimeError, không trả JSON giả."""
         backend = TransformersBackend("model-chua-kiem-chung/test")
