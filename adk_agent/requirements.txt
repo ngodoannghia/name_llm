@@ -1,0 +1,16 @@
+# Requirements chạy ingest ADK (đã kiểm chứng trên Python 3.12.3).
+# Cài bằng: .venv/bin/pip install -r requirements.txt
+# ADK yêu cầu Python >= 3.11.
+
+# Khung agent ADK 2.13.0. Bắt buộc phải có extra [extensions]: không
+# có nó thì import LiteLlm (dùng cho model thật qua API) sẽ lỗi ngay.
+# Extra này kéo theo litellm, google-genai và các phụ thuộc khác.
+google-adk[extensions]==2.13.0
+
+# Đọc/ghi CSV, XLSX và làm việc với bảng dữ liệu trong ingest.
+pandas==2.3.3
+openpyxl==3.1.5
+
+# Driver session service dạng DB (driver mặc định dùng memory nhưng cứ
+# cài cho đủ để dùng được cả hai chế độ session service).
+aiosqlite==0.22.1

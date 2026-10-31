@@ -1,0 +1,8 @@
+# Requirements cho phát triển/test (cài thêm ngoài requirements.txt).
+# Cài bằng: .venv/bin/pip install -r requirements-dev.txt
+-r requirements.txt
+
+# Chạy test suite (pytest.ini đã bật asyncio_mode = auto nên test
+# async không cần decorator riêng).
+pytest==9.1.1
+pytest-asyncio==1.4.0
