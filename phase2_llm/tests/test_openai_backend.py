@@ -1,17 +1,20 @@
 # -*- coding: utf-8 -*-
-"""Test backend OpenAI phát triển — KHÔNG gọi mạng thật.
+"""Test backend OpenAI Chat Completions phát triển — KHÔNG gọi mạng thật.
 
 Mục đích:
     Kiểm chứng các điểm sau mà không tốn quota API và không cần key thật:
       1. ``load_dotenv`` đọc đúng file .env mẫu (model, base_url, các
-         tham số từ curl) và không ghi đè biến môi trường đã có sẵn.
+         tham số từ curl Chat Completions) và không ghi đè biến môi
+         trường đã có sẵn.
       2. Thiếu key thì ``OpenAIConfig`` raise RuntimeError rõ ràng, và
          thông báo lỗi không chứa key.
-      3. ``generate_json`` trích đúng văn bản từ phản hồi Responses API
-         (cả dạng ``output_text`` tổng hợp lẫn dạng mảng ``output``),
-         và dùng ``json_schema`` thay cho ``text`` như curl gốc.
+      3. ``generate_json`` gửi đúng dạng curl Chat Completions:
+         POST ``{base_url}/chat/completions``, body gồm model, messages
+         (system + user), response_format json_object, temperature 0,
+         và trích đúng ``choices[0].message.content``.
       4. Lỗi HTTP 401 được chuyển thành RuntimeError có status code,
          không lộ key, không retry vô hạn.
+      5. Nội dung không phải JSON, hoặc JSON không phải object, thì raise.
 
 Cách mock mạng: thay ``urllib.request.urlopen`` bằng hàm giả trả về một
 object giống file (có ``read()`` và hỗ trợ ``with``), và ghi lại request
@@ -31,8 +34,8 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from openai_backend import (  # noqa: E402
+    OpenAIChatBackend,
     OpenAIConfig,
-    OpenAIResponsesBackend,
     load_dotenv,
 )
 
@@ -51,6 +54,14 @@ class _FakeResponse:
 
     def __exit__(self, *args):
         return False
+
+
+def _chat_payload(content):
+    """Phản hồi Chat Completions mẫu với content là chuỗi JSON."""
+    return {
+        "id": "chatcmpl-gia",
+        "choices": [{"message": {"role": "assistant", "content": content}}],
+    }
 
 
 class TestLoadDotenv(unittest.TestCase):
@@ -84,27 +95,29 @@ class TestOpenAIConfig(unittest.TestCase):
                 OpenAIConfig(env_file="/duong/dan/khong/ton/tai/.env")
             self.assertIn("OPENAI_API_KEY", str(caught.exception))
 
-    def test_defaults_match_user_curl(self):
+    def test_defaults_match_user_chat_curl(self):
         config = OpenAIConfig(api_key="key-gia-cho-test")
         self.assertEqual(config.model, "gpt-4o-mini")
         self.assertEqual(config.base_url, "https://api.openai.com/v1")
-        self.assertEqual(config.service_tier, "default")
-        self.assertEqual(config.temperature, 1.0)
+        # Theo curl Chat Completions mới: temperature 0, không còn
+        # service_tier/store của bản Responses cũ.
+        self.assertEqual(config.temperature, 0.0)
         self.assertEqual(config.max_output_tokens, 2048)
         self.assertEqual(config.top_p, 1.0)
-        self.assertTrue(config.store)
+        self.assertFalse(hasattr(config, "service_tier"))
+        self.assertFalse(hasattr(config, "store"))
 
     def test_repr_does_not_leak_key(self):
         config = OpenAIConfig(api_key="sk-bi-mat-khong-duoc-in")
         self.assertNotIn("sk-bi-mat-khong-duoc-in", repr(config))
 
 
-class TestOpenAIResponsesBackend(unittest.TestCase):
-    """Test gọi API bằng mock, không gọi mạng thật."""
+class TestOpenAIChatBackend(unittest.TestCase):
+    """Test gọi Chat Completions bằng mock, không gọi mạng thật."""
 
     def setUp(self):
         self.config = OpenAIConfig(api_key="key-gia-cho-test")
-        self.backend = OpenAIResponsesBackend(config=self.config)
+        self.backend = OpenAIChatBackend(config=self.config)
         self.schema = {
             "type": "object",
             "properties": {"measure": {"type": "string"}},
@@ -112,51 +125,71 @@ class TestOpenAIResponsesBackend(unittest.TestCase):
         }
         self.expected = {"measure": "revenue"}
 
-    def test_generate_json_uses_json_schema_and_extracts_output_text(self):
+    def test_generate_json_uses_chat_completions_shape(self):
         captured = {}
 
         def fake_urlopen(request, timeout=None):
             captured["url"] = request.full_url
             captured["body"] = json.loads(request.data.decode("utf-8"))
             captured["auth"] = request.headers.get("Authorization")
-            return _FakeResponse({"output_text": json.dumps(self.expected)})
+            return _FakeResponse(_chat_payload(json.dumps(self.expected)))
 
         with mock.patch("openai_backend.urllib.request.urlopen", side_effect=fake_urlopen):
             result = self.backend.generate_json("prompt gia", self.schema)
         self.assertEqual(result, self.expected)
-        self.assertEqual(captured["url"], "https://api.openai.com/v1/responses")
-        # Điểm khác curl gốc có chủ ý: parser cần json_schema, không phải text.
-        self.assertEqual(captured["body"]["text"]["format"]["type"], "json_schema")
-        self.assertEqual(captured["body"]["text"]["format"]["schema"], self.schema)
-        self.assertEqual(captured["body"]["model"], "gpt-4o-mini")
-        # Parser không bật web search, nên body không có trường include.
-        self.assertNotIn("include", captured["body"])
+        self.assertEqual(captured["url"], "https://api.openai.com/v1/chat/completions")
+        body = captured["body"]
+        self.assertEqual(body["model"], "gpt-4o-mini")
+        # Đúng dạng curl: messages system + user, response_format json_object.
+        self.assertEqual(body["messages"][0]["role"], "system")
+        self.assertEqual(body["messages"][1]["role"], "user")
+        self.assertEqual(body["messages"][1]["content"], "prompt gia")
+        self.assertEqual(body["response_format"], {"type": "json_object"})
+        self.assertEqual(body["temperature"], 0.0)
+        # max_tokens map từ LLM_MAX_OUTPUT_TOKENS, không phải max_output_tokens.
+        self.assertEqual(body["max_tokens"], 2048)
+        self.assertNotIn("max_output_tokens", body)
+        # Không còn trường Responses-specific.
+        self.assertNotIn("input", body)
+        self.assertNotIn("text", body)
+        self.assertNotIn("service_tier", body)
+        self.assertNotIn("store", body)
+        # Schema được đưa vào system message để model thấy đúng trường.
+        self.assertIn("measure", body["messages"][0]["content"])
         self.assertEqual(captured["auth"], "Bearer key-gia-cho-test")
 
-    def test_generate_json_extracts_from_output_array(self):
-        payload = {
-            "output": [{
-                "type": "message",
-                "content": [{"type": "output_text", "text": json.dumps(self.expected)}],
-            }]
-        }
+    def test_generate_json_strips_markdown_fence(self):
+        content = "```json\n" + json.dumps(self.expected) + "\n```"
         with mock.patch("openai_backend.urllib.request.urlopen",
-                         return_value=_FakeResponse(payload)):
+                         return_value=_FakeResponse(_chat_payload(content))):
             self.assertEqual(self.backend.generate_json("prompt gia", self.schema), self.expected)
 
     def test_http_401_becomes_runtime_error_without_key(self):
         error = urllib.error.HTTPError(
-            url="https://api.openai.com/v1/responses", code=401,
+            url="https://api.openai.com/v1/chat/completions", code=401,
             msg="Unauthorized", hdrs=None, fp=io.BytesIO(b"{}"))
         with mock.patch("openai_backend.urllib.request.urlopen", side_effect=error):
             with self.assertRaises(RuntimeError) as caught:
                 self.backend.generate_json("prompt gia", self.schema)
             self.assertIn("401", str(caught.exception))
+            self.assertIn("Chat Completions", str(caught.exception))
             self.assertNotIn("key-gia-cho-test", str(caught.exception))
 
     def test_non_json_output_raises(self):
         with mock.patch("openai_backend.urllib.request.urlopen",
-                         return_value=_FakeResponse({"output_text": "khong phai json"})):
+                         return_value=_FakeResponse(_chat_payload("khong phai json"))):
+            with self.assertRaises(RuntimeError):
+                self.backend.generate_json("prompt gia", self.schema)
+
+    def test_non_object_json_raises(self):
+        with mock.patch("openai_backend.urllib.request.urlopen",
+                         return_value=_FakeResponse(_chat_payload("[1, 2, 3]"))):
+            with self.assertRaises(RuntimeError):
+                self.backend.generate_json("prompt gia", self.schema)
+
+    def test_empty_choices_raises(self):
+        with mock.patch("openai_backend.urllib.request.urlopen",
+                         return_value=_FakeResponse({"choices": []})):
             with self.assertRaises(RuntimeError):
                 self.backend.generate_json("prompt gia", self.schema)
 

@@ -75,7 +75,7 @@ sys.path.insert(0, str(_PHASE2_LLM_DIR / "src"))
 sys.path.insert(0, str(_PHASE2_LLM_DIR))
 
 from llm_parser import parse_with_llm  # noqa: E402
-from openai_backend import OpenAIResponsesBackend  # noqa: E402
+from openai_backend import OpenAIChatBackend  # noqa: E402
 from run_phase2_llm import _parse_with_template_fallback, run_phase2_llm  # noqa: E402
 
 
@@ -152,7 +152,7 @@ class LoggingBackend:
     lớp bọc này và được log bắt đầu / thành công / lỗi kèm thời gian.
 
     Đầu vào (__init__):
-        backend: backend thật (ở đây là OpenAIResponsesBackend).
+        backend: backend thật (ở đây là OpenAIChatBackend).
         logger: ConsoleLogger để ghi log.
     """
 
@@ -379,7 +379,7 @@ def main(argv=None):
         # phát hiện mọi câu đều fallback về template. Thông báo lỗi ở đây
         # không chứa key (xem OpenAIConfig).
         try:
-            real_backend = OpenAIResponsesBackend(env_file=args.env_file)
+            real_backend = OpenAIChatBackend(env_file=args.env_file)
         except RuntimeError as exc:
             logger.log(f"Lỗi cấu hình OpenAI: {exc}", important=True)
             print(f"Lỗi cấu hình OpenAI: {exc}", file=sys.stderr)
@@ -400,9 +400,10 @@ def main(argv=None):
             important=True)
         logger.log(
             f"Cấu hình LLM: model={config.model}, base_url={config.base_url}, "
-            f"service_tier={config.service_tier}, temperature={config.temperature}, "
-            f"max_output_tokens={config.max_output_tokens}, top_p={config.top_p}, "
-            f"store={config.store}, timeout={config.timeout_seconds}s "
+            f"endpoint=/chat/completions, response_format=json_object, "
+            f"temperature={config.temperature}, "
+            f"max_tokens={config.max_output_tokens}, top_p={config.top_p}, "
+            f"timeout={config.timeout_seconds}s "
             f"(OPENAI_API_KEY: đã cấu hình, KHÔNG in ra đây).",
             important=True)
         logger.log(

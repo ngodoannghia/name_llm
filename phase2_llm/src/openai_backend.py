@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Backend OpenAI Responses API — CHỈ DÙNG CHO PHÁT TRIỂN (TEACHER).
+"""Backend OpenAI Chat Completions — CHỈ DÙNG CHO PHÁT TRIỂN (TEACHER).
 
 Mục đích:
     Cho phép chạy tầng parser LLM của phase2_llm bằng model API mà người
@@ -8,6 +8,13 @@ Mục đích:
     bằng solver (chỉ giữ trace nào cho đáp án đúng trên train). Đây là
     cách duy nhất để "chạy được" parser LLM khi máy chưa có model cục bộ
     ≤ 15B, weights, hay transformers/torch.
+
+    Bản này dùng đúng dạng gọi trong curl mới nhất người dùng gửi:
+    ``POST {base_url}/chat/completions`` với body gồm ``model``,
+    ``messages`` (system + user), ``response_format: {"type": "json_object"}``
+    và ``temperature: 0``. Bản trước dùng Responses API
+    (``POST /responses`` với ``input`` + ``text.format json_schema``);
+    bản đó đã bị thay thế hoàn toàn, không còn gửi tới ``/responses`` nữa.
 
 CẢNH BÁO — KHÔNG PHẢI BACKEND DOCKER CUỐI:
     - Class này CỐ TÌNH không kế thừa ``LocalModelBackend`` của
@@ -29,36 +36,46 @@ Cách cấu hình (file ``.env``):
     ``LLM_ENV_FILE``, rồi ``phase2_llm/.env``, ``../.env`` (thư mục
     datamate), rồi ``.env`` ở thư mục làm việc hiện tại.
 
-    Các biến (giá trị mặc định lấy đúng từ curl đã gửi, trừ điểm ghi ở
-    dưới):
+    Các biến:
       - ``OPENAI_API_KEY``: bắt buộc, không có giá trị mặc định. Nếu
         thiếu, backend raise ``RuntimeError`` ngay khi khởi tạo, để
         runner fail-fast thay vì chạy hàng trăm câu rồi mới fallback.
       - ``OPENAI_BASE_URL``: mặc định ``https://api.openai.com/v1``.
       - ``OPENAI_MODEL`` (hoặc ``LLM_MODEL`` nếu không có): mặc định
         ``gpt-4o-mini``.
-      - ``LLM_SERVICE_TIER``: mặc định ``default`` (theo curl).
-      - ``LLM_TEMPERATURE``: mặc định ``1`` (theo curl). Lưu ý: với
-        parser, temperature 1 cho kết quả không xác định giữa các lần
-        chạy; nếu muốn trace ổn định hơn thì đặt ``0`` trong ``.env``.
-      - ``LLM_MAX_OUTPUT_TOKENS``: mặc định ``2048`` (theo curl).
-      - ``LLM_TOP_P``: mặc định ``1`` (theo curl).
-      - ``LLM_STORE``: mặc định ``true`` (theo curl).
+      - ``LLM_TEMPERATURE``: mặc định ``0`` (theo curl mới; temperature
+        0 cho kết quả parser xác định nhất, khác bản Responses cũ mặc
+        định 1).
+      - ``LLM_MAX_OUTPUT_TOKENS``: mặc định ``2048``. Tên biến giữ nguyên
+        để tương thích file ``.env`` cũ, nhưng khi gửi Chat Completions
+        nó được map thành trường ``max_tokens`` (Chat Completions không
+        có trường ``max_output_tokens``).
+      - ``LLM_TOP_P``: mặc định ``1``.
       - ``LLM_TIMEOUT_SECONDS``: mặc định ``120`` (không có trong curl,
         thêm để một lần gọi kẹt mạng không treo cả pipeline).
 
-Hai điểm khác biệt có chủ ý so với curl gốc (để parser chạy đúng):
-    1. Curl gốc đặt ``text.format.type = "text"`` (trả văn bản tự do).
-       Parser cần JSON theo schema, nên backend đổi thành
-       ``text.format = {"type": "json_schema", "name": "ParsedQuestion",
-       "schema": schema, "strict": true}``. Schema được truyền vào từ
-       ``llm_parser`` (``PARSED_QUESTION_JSON_SCHEMA``), backend không
-       tự bịa schema riêng.
-    2. Curl gốc có ``include: ["web_search_call.action.sources"]`` và
-       ``tools: []``. Vì parser không dùng tool web search, backend
-       không gửi trường ``include`` đó, cũng không bật tool nào — vừa
-       tránh gọi search ngoài không cần thiết, vừa giữ kết quả chỉ phụ
-       thuộc vào câu hỏi + dữ liệu shop đã đưa trong prompt.
+Điểm khác biệt quan trọng so với bản Responses cũ (phải hiểu rõ):
+    1. Curl mới dùng ``response_format: {"type": "json_object"}``, KHÔNG
+       phải ``json_schema`` với ``strict: true``. Nghĩa là API chỉ đảm
+       bảo trả về một object JSON hợp lệ, KHÔNG đảm bảo đúng trường,
+       đúng enum, đúng kiểu của ParsedQuestion. Vì vậy tầng
+       ``llm_parser.validate_and_build`` + repair tối đa 2 lần trở thành
+       chốt chặn bắt buộc, không còn là dự phòng: JSON sai schema sẽ bị
+       repair, repair không được thì fallback về template, chứ không
+       được coi là parse thành công.
+    2. Nội dung system/user trong curl ví dụ (trích xuất sản phẩm, các
+       trường ``product_type``/``feature``, câu "bình sữa có van chống
+       sặc") CHỈ là ví dụ minh họa dạng gọi, KHÔNG phải nội dung dùng
+       cho DataMate. Backend này KHÔNG hard-code nội dung đó. Nội dung
+       thật vẫn là prompt do ``llm_parser.build_prompt`` tạo (câu hỏi,
+       thực thể shop, mô tả schema ParsedQuestion), gửi ở vị trí user;
+       system message chỉ là chỉ thị chung "chỉ trả JSON duy nhất" kèm
+       schema JSON nguyên vẹn để model thấy đúng tên trường/kiểu.
+    3. Các trường Responses-specific của bản cũ (``service_tier``,
+       ``store``, ``input``, ``text.format``, ``include`` web search)
+       không còn được gửi, vì curl Chat Completions mới không dùng
+       chúng. Biến ``LLM_SERVICE_TIER`` / ``LLM_STORE`` trong file
+       ``.env`` cũ (nếu còn) sẽ bị bỏ qua, không còn ý nghĩa.
 
 Bảo mật:
     - Backend KHÔNG BAO GIỜ in, log, hay đưa key vào thông báo lỗi.
@@ -87,6 +104,7 @@ from pathlib import Path
 
 __all__ = [
     "OpenAIConfig",
+    "OpenAIChatBackend",
     "OpenAIResponsesBackend",
     "load_dotenv",
 ]
@@ -175,18 +193,6 @@ def _parse_int(raw, default):
         return default
 
 
-def _parse_bool(raw, default):
-    """Chuyển chuỗi sang bool, nhận true/false/1/0/yes/no (không phân biệt hoa thường)."""
-    if raw is None:
-        return default
-    text = str(raw).strip().lower()
-    if text in ("true", "1", "yes", "on"):
-        return True
-    if text in ("false", "0", "no", "off"):
-        return False
-    return default
-
-
 # ---------------------------------------------------------------------------
 # Cấu hình backend
 # ---------------------------------------------------------------------------
@@ -206,8 +212,8 @@ class OpenAIConfig:
     """
 
     def __init__(self, env_file=None, api_key=None, base_url=None,
-                 model=None, service_tier=None, temperature=None,
-                 max_output_tokens=None, top_p=None, store=None,
+                 model=None, temperature=None,
+                 max_output_tokens=None, top_p=None,
                  timeout_seconds=None):
         load_dotenv(env_file)
         # Key: tham số truyền vào thắng, rồi tới biến môi trường / .env.
@@ -223,13 +229,10 @@ class OpenAIConfig:
             or os.environ.get("LLM_MODEL", "")
             or "gpt-4o-mini"
         )
-        self.service_tier = (
-            service_tier if service_tier is not None
-            else os.environ.get("LLM_SERVICE_TIER", "default")
-        )
+        # Theo curl mới: temperature 0, không còn service_tier/store.
         self.temperature = (
             temperature if temperature is not None
-            else _parse_float(os.environ.get("LLM_TEMPERATURE"), 1.0)
+            else _parse_float(os.environ.get("LLM_TEMPERATURE"), 0.0)
         )
         self.max_output_tokens = (
             max_output_tokens if max_output_tokens is not None
@@ -238,10 +241,6 @@ class OpenAIConfig:
         self.top_p = (
             top_p if top_p is not None
             else _parse_float(os.environ.get("LLM_TOP_P"), 1.0)
-        )
-        self.store = (
-            store if store is not None
-            else _parse_bool(os.environ.get("LLM_STORE"), True)
         )
         self.timeout_seconds = (
             timeout_seconds if timeout_seconds is not None
@@ -263,11 +262,11 @@ class OpenAIConfig:
 
 
 # ---------------------------------------------------------------------------
-# Backend gọi OpenAI Responses API
+# Backend gọi OpenAI Chat Completions API
 # ---------------------------------------------------------------------------
 
-class OpenAIResponsesBackend:
-    """Backend phát triển gọi OpenAI Responses API để sinh JSON theo schema.
+class OpenAIChatBackend:
+    """Backend phát triển gọi OpenAI Chat Completions để sinh JSON.
 
     Đây KHÔNG phải ``LocalModelBackend`` (xem cảnh báo ở docstring module).
     Nó chỉ có cùng phương thức ``generate_json(prompt, schema)`` để
@@ -280,7 +279,7 @@ class OpenAIResponsesBackend:
 
     Raise:
         RuntimeError ngay khi khởi tạo nếu thiếu key, và khi gọi API gặp
-        lỗi HTTP, lỗi mạng, hoặc phản hồi không chứa văn bản / văn bản
+        lỗi HTTP, lỗi mạng, hoặc phản hồi không chứa nội dung / nội dung
         không phải JSON. Caller (parse_with_llm) sẽ bắt lỗi này và
         fallback về template, đúng hợp đồng cũ — không bao giờ trả một
         JSON giả vờ để pipeline tưởng đã parse xong.
@@ -289,76 +288,113 @@ class OpenAIResponsesBackend:
     def __init__(self, config=None, env_file=None):
         self.config = config if config is not None else OpenAIConfig(env_file=env_file)
 
-    def _build_payload(self, prompt, schema):
-        """Dựng body JSON gửi tới Responses API từ prompt và schema.
+    def _build_system_message(self, schema):
+        """Dựng system message cho Chat Completions từ schema.
 
-        Hai điểm khác curl gốc đã giải thích ở docstring module: dùng
-        ``json_schema`` thay cho ``text``, và không gửi ``include``
-        web search vì parser không dùng tool nào.
+        System message gồm chỉ thị chung (chỉ trả JSON duy nhất, không
+        giải thích, không tính số đáp án) kèm schema JSON nguyên vẹn.
+        Điều này quan trọng vì ``response_format: json_object`` chỉ ép
+        JSON hợp lệ, không ép schema — model cần thấy schema thật ở
+        system để trả đúng tên trường/kiểu, trước khi tầng validate của
+        llm_parser kiểm chứng lại lần nữa.
         """
-        payload = {
+        instruction = (
+            "Bạn là bộ phận parse câu hỏi của hệ thống DataMate. "
+            "Chỉ trả DUY NHẤT một object JSON, không giải thích, "
+            "không tính số đáp án, không thêm text ngoài JSON."
+        )
+        if schema is None:
+            return instruction
+        try:
+            schema_text = json.dumps(schema, ensure_ascii=False)
+        except (TypeError, ValueError):
+            return instruction
+        return (
+            f"{instruction} JSON phải tuân thủ schema sau:\n{schema_text}"
+        )
+
+    def _build_payload(self, prompt, schema):
+        """Dựng body JSON gửi tới Chat Completions, đúng dạng curl mới.
+
+        - ``messages``: system (chỉ thị + schema) và user (prompt đầy đủ
+          do llm_parser tạo: câu hỏi, thực thể shop, mô tả schema).
+        - ``response_format``: ``{"type": "json_object"}`` — chỉ ép JSON
+          object, không ép schema (xem docstring module).
+        - ``temperature``: mặc định 0 theo curl mới.
+        - ``max_tokens``: map từ biến cấu hình LLM_MAX_OUTPUT_TOKENS cũ.
+        """
+        return {
             "model": self.config.model,
-            "input": prompt,
-            "text": {
-                "format": {
-                    "type": "json_schema",
-                    "name": "ParsedQuestion",
-                    "schema": schema,
-                    "strict": True,
-                }
-            },
+            "messages": [
+                {"role": "system", "content": self._build_system_message(schema)},
+                {"role": "user", "content": prompt},
+            ],
+            "response_format": {"type": "json_object"},
             "temperature": self.config.temperature,
-            "max_output_tokens": self.config.max_output_tokens,
             "top_p": self.config.top_p,
-            "store": self.config.store,
+            "max_tokens": self.config.max_output_tokens,
         }
-        if self.config.service_tier:
-            payload["service_tier"] = self.config.service_tier
-        return payload
 
     @staticmethod
-    def _extract_output_text(response):
-        """Trích văn bản trả lời từ JSON của Responses API.
+    def _extract_content(response):
+        """Trích nội dung văn bản từ JSON của Chat Completions.
 
-        API có thể trả trường tổng hợp ``output_text`` (thuận tiện nhất),
-        hoặc mảng ``output`` chứa các item dạng message với content là
-        ``output_text``. Hàm thử cả hai, và raise ``RuntimeError`` nếu
-        không trích được gì — thay vì trả chuỗi rỗng để caller parse sai.
+        Dạng chuẩn: ``choices[0].message.content`` là chuỗi JSON.
+        Hàm raise ``RuntimeError`` nếu không có choices, message rỗng,
+        hoặc content rỗng — thay vì trả chuỗi rỗng để caller parse sai.
         """
         if isinstance(response, dict):
-            aggregated = response.get("output_text")
-            if isinstance(aggregated, str) and aggregated.strip():
-                return aggregated
-            for item in response.get("output", []) or []:
-                if not isinstance(item, dict):
-                    continue
-                for part in item.get("content", []) or []:
-                    if isinstance(part, dict) and part.get("type") == "output_text":
-                        text = part.get("text", "")
-                        if isinstance(text, str) and text.strip():
-                            return text
+            choices = response.get("choices") or []
+            if choices and isinstance(choices[0], dict):
+                message = choices[0].get("message") or {}
+                content = message.get("content")
+                if isinstance(content, str) and content.strip():
+                    return content
         raise RuntimeError(
-            "Phản hồi OpenAI không chứa văn bản output_text; "
+            "Phản hồi OpenAI không chứa nội dung choices[0].message.content; "
             "không thể trích JSON ParsedQuestion."
         )
 
+    @staticmethod
+    def _strip_code_fence(text):
+        """Gỡ khung markdown ```json ... ``` nếu model lỡ bọc JSON trong đó.
+
+        Với ``response_format: json_object`` model không nên dùng fence,
+        nhưng gỡ fence là an toàn (chỉ cắt phần bao ngoài, không sửa
+        nội dung JSON bên trong) và giúp tránh một lỗi fallback không
+        đáng có. Nếu sau khi gỡ vẫn không phải JSON thì caller vẫn raise.
+        """
+        cleaned = text.strip()
+        if cleaned.startswith("```"):
+            # Bỏ dòng mở ```json hoặc ```, và dòng đóng ``` cuối cùng.
+            lines = cleaned.splitlines()
+            if lines and lines[0].strip().startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            cleaned = "\n".join(lines).strip()
+        return cleaned
+
     def generate_json(self, prompt, schema):
-        """Gọi Responses API một lần và trả dict JSON đã parse.
+        """Gọi Chat Completions một lần và trả dict JSON đã parse.
 
         Đầu vào:
             prompt: prompt đầy đủ do ``llm_parser.build_prompt`` tạo.
-            schema: JSON Schema của ParsedQuestion (truyền nguyên vẹn
-                vào ``text.format`` của API, không tự sửa schema).
+            schema: JSON Schema của ParsedQuestion — dùng để dựng system
+                message (xem _build_system_message), không gửi riêng
+                thành trường json_schema vì Chat Completions với
+                json_object không nhận trường đó.
 
         Đầu ra:
             dict là JSON mà model trả về (chưa qua validate của
-            ``llm_parser`` — tầng đó sẽ kiểm chứng và repair nếu cần).
+            ``llm_parser`` — tầng đó sẽ kiểm chứng, repair tối đa 2 lần
+            nếu sai schema, rồi fallback về template nếu vẫn sai).
 
         Raise:
             RuntimeError khi lỗi HTTP (kèm status code, không kèm key),
             lỗi mạng/timeout, hoặc văn bản trả về không phải JSON hợp lệ.
         """
-        url = f"{self.config.base_url}/responses"
+        url = f"{self.config.base_url}/chat/completions"
         data = json.dumps(self._build_payload(prompt, schema)).encode("utf-8")
         request = urllib.request.Request(
             url,
@@ -378,13 +414,13 @@ class OpenAIResponsesBackend:
             # retry vô hạn sẽ đốt quota và treo pipeline; caller fallback
             # về template là hành vi đúng theo hợp đồng.
             raise RuntimeError(
-                f"OpenAI Responses API trả lời HTTP {exc.code}; "
+                f"OpenAI Chat Completions API trả lời HTTP {exc.code}; "
                 f"kiểm tra lại OPENAI_API_KEY và OPENAI_MODEL "
                 f"({self.config.model})."
             ) from exc
         except Exception as exc:  # noqa: BLE001 - lỗi mạng/timeout đều fallback
             raise RuntimeError(
-                f"Không gọi được OpenAI Responses API ({type(exc).__name__}); "
+                f"Không gọi được OpenAI Chat Completions API ({type(exc).__name__}); "
                 f"kiểm tra mạng và OPENAI_BASE_URL ({self.config.base_url})."
             ) from exc
         try:
@@ -394,7 +430,7 @@ class OpenAIResponsesBackend:
                 "Phản hồi OpenAI không phải JSON hợp lệ; không thể trích "
                 "JSON ParsedQuestion."
             ) from exc
-        text = self._extract_output_text(response)
+        text = self._strip_code_fence(self._extract_content(response))
         try:
             parsed = json.loads(text)
         except ValueError as exc:
@@ -409,3 +445,8 @@ class OpenAIResponsesBackend:
                 "llm_parser sẽ repair hoặc fallback về template."
             )
         return parsed
+
+
+# Tên cũ giữ lại để code/test cũ import được, nhưng nó giờ là backend
+# Chat Completions, không còn là Responses API nữa.
+OpenAIResponsesBackend = OpenAIChatBackend
