@@ -98,3 +98,49 @@ async def test_fake_canned_in_order() -> None:
   second = json.loads(await _first_response_text(fake, "bất kỳ"))
   assert first == {"canned": 1}
   assert second == {"canned": 2}
+
+
+async def test_fake_dispatch_table() -> None:
+  """FakeLlm sinh TableSchema từ bản nháp MỘT bảng (giữ giá trị đo)."""
+  text = json.dumps(
+      {"table": {
+          "table_id": "don",
+          "original_names": ["don"],
+          "source_sheets": ["don"],
+          "sqlite_table": "don",
+          "row_count": 2,
+          "description_vi": "",
+          "columns": [
+              {
+                  "original_name": "ma",
+                  "sqlite_name": "ma",
+                  "type": "TEXT",
+                  "description_vi": "",
+                  "role_hint": "unknown",
+                  "sample_values": ["DH1"],
+                  "distinct_count": 2,
+                  "distinct_values": ["DH1", "DH2"],
+                  "nullable_rate": 0.0,
+              }
+          ],
+          "date_range": {},
+      }},
+      ensure_ascii=False,
+  )
+  parsed = json.loads(await _first_response_text(FakeLlm(), text))
+  assert parsed["sqlite_table"] == "don"
+  assert parsed["columns"][0]["sample_values"] == ["DH1"]
+  assert parsed["columns"][0]["distinct_values"] == ["DH1", "DH2"]
+
+
+async def test_fake_dispatch_meta() -> None:
+  """FakeLlm sinh ShopMeta rỗng từ tóm tắt meta."""
+  text = json.dumps(
+      {"tables_summary": [
+          {"sqlite_table": "don",
+           "columns": [{"sqlite_name": "ma", "role_hint": "order_id"}]},
+      ]},
+      ensure_ascii=False,
+  )
+  parsed = json.loads(await _first_response_text(FakeLlm(), text))
+  assert parsed == {"join_hints": [], "notes": []}

@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Các node validator, route và fallback cho 3 loop của workflow ingest.
+"""Các node validator, route và fallback cho 4 loop của workflow ingest.
+
+Các loop là header, merge, schema theo từng bảng và schema meta. Loop
+schema theo từng bảng khác 3 loop còn lại ở điểm: hết lượt thử thì
+không fail cả shop mà fallback bảng đó về bản nháp đo được (xem
+docstring của make_route_schema_table), vì dữ liệu đo được của bảng
+vẫn đúng, chỉ thiếu mô tả do model viết.
+
 
 Module này thuộc tầng kiểm chứng. Nguyên tắc xuyên suốt (xem plan §2.4):
 - Validator trả Verdict, không raise exception để kết thúc loop (node
@@ -13,9 +20,7 @@ Module này thuộc tầng kiểm chứng. Nguyên tắc xuyên suốt (xem plan
 from __future__ import annotations
 
 import json
-import sqlite3
 from collections.abc import Callable
-from pathlib import Path
 
 from google.adk import Event
 
@@ -24,7 +29,8 @@ from .._models import (
     HeaderProposal,
     MergeProposal,
     RawTable,
-    ShopSchema,
+    ShopMeta,
+    TableSchema,
     Verdict,
 )
 from .._phase1 import normalize_key
@@ -267,133 +273,323 @@ def validate_merge(
   )
 
 
-async def validate_schema(
-    node_input: ShopSchema,
-    tmp_db_path: str = "",
-    business_id: str = "",
-    output_dir: str = "",
-) -> Event:
-  """Kiểm chứng schema do SchemaAgent đề xuất rồi ghi file schema khi đạt.
+def _measured_mismatch(agent_table: dict, draft_table: dict) -> str:
+  """So sánh các trường đã đo của bảng do agent viết với bản nháp.
 
-  Kiểm chứng bằng truy vấn thật trên DB tạm (không tin lời agent):
-  - business_id trong schema phải khớp shop đang chạy.
-  - Tập bảng trong schema phải khớp tập bảng trong DB (trừ bảng meta _*).
-  - Tập cột mỗi bảng phải khớp cột thật trong DB (PRAGMA table_info).
-  - Mỗi sample_values phải tồn tại trong cột (so sánh dạng TEXT).
-  - Nếu distinct_values được liệt kê thì số lượng phải khớp
-    COUNT(DISTINCT) đo được và từng giá trị phải tồn tại.
+  Chỉ so sánh trường đã đo (tên bảng/cột, kiểu, mẫu, distinct, số
+  dòng, khoảng ngày); mô tả và role_hint là phần agent bổ sung nên
+  không so sánh. Bản nháp lưu date_range dạng {} khi bảng không có
+  cột ngày, còn agent (qua TableSchema) luôn trả {"min": ..., "max":
+  ...} nên phải chuẩn hóa {} thành {"min": "", "max": ""} trước khi
+  so sánh, nếu không mọi bảng không có cột ngày đều bị bác oan.
 
-  File schema chỉ được ghi khi mọi kiểm tra đạt: schema sai thì workflow
-  trả lời về sau sẽ sinh SQL sai, nên không được xuất schema xấu.
+  So sánh với bản nháp tương đương kiểm chứng trực tiếp trên DB, vì
+  bản nháp chính là kết quả đo từ DB tạm ở node write_sqlite_tmp
+  (mẫu, distinct, số dòng đều truy vấn thật), nên validator này không
+  cần mở DB lần nữa.
 
   Args:
-    node_input: Schema đề xuất (đã coerce thành ShopSchema).
-    tmp_db_path: Đường dẫn DB tạm (lấy từ state).
-    business_id: Id shop đang chạy (lấy từ state).
-    output_dir: Thư mục ghi kết quả (lấy từ state).
+    agent_table: Bảng do agent viết, đã dump thành dict.
+    draft_table: Bảng trong bản nháp (lấy từ state).
 
   Returns:
-    Một Event duy nhất mang Verdict và state (schema_path khi đạt;
-    nhánh fail không ghi last_error — route node tự ghi).
+    Chuỗi rỗng khi mọi trường đã đo khớp, ngược lại là lý do sai lệch.
   """
-  import asyncio
-
-  def _fail(reason: str) -> Event:
-    """Tạo Event Verdict fail (không ghi last_error — route tự ghi, xem
-    docstring của _verdict_event)."""
-    return _verdict_event(Verdict(status="fail", reason=reason))
-
-  if node_input.business_id != business_id:
-    return _fail(
-        f"Schema ghi business_id {node_input.business_id} nhưng shop đang "
-        f"chạy là {business_id}."
+  for key in (
+      "table_id",
+      "original_names",
+      "source_sheets",
+      "sqlite_table",
+      "row_count",
+  ):
+    if agent_table.get(key) != draft_table.get(key):
+      return (
+          f"Trường đã đo {key} của bảng {draft_table.get('sqlite_table')} "
+          f"bị sửa: bản nháp là {draft_table.get(key)!r} nhưng agent "
+          f"viết {agent_table.get(key)!r}."
+      )
+  draft_range = draft_table.get("date_range") or {}
+  if draft_range == {}:
+    draft_range = {"min": "", "max": ""}
+  if agent_table.get("date_range") != draft_range:
+    return (
+        f"Khoảng ngày của bảng {draft_table.get('sqlite_table')} bị sửa: "
+        f"bản nháp là {draft_range!r} nhưng agent viết "
+        f"{agent_table.get('date_range')!r}."
     )
-  if not node_input.tables:
-    return _fail("Schema không chứa bảng nào.")
-  if not tmp_db_path or not Path(tmp_db_path).is_file():
-    return _fail("Không tìm thấy DB tạm để kiểm chứng schema.")
+  agent_columns = agent_table.get("columns", [])
+  draft_columns = draft_table.get("columns", [])
+  if len(agent_columns) != len(draft_columns):
+    return (
+        f"Bảng {draft_table.get('sqlite_table')} có "
+        f"{len(draft_columns)} cột trong bản nháp nhưng agent viết "
+        f"{len(agent_columns)} cột."
+    )
+  for agent_col, draft_col in zip(agent_columns, draft_columns):
+    for key in (
+        "original_name",
+        "sqlite_name",
+        "type",
+        "sample_values",
+        "distinct_count",
+        "distinct_values",
+        "nullable_rate",
+    ):
+      if agent_col.get(key) != draft_col.get(key):
+        return (
+            f"Trường đã đo {key} của cột {draft_col.get('sqlite_name')} "
+            f"(bảng {draft_table.get('sqlite_table')}) bị sửa: bản nháp "
+            f"là {draft_col.get(key)!r} nhưng agent viết "
+            f"{agent_col.get(key)!r}."
+        )
+  return ""
 
-  def _check() -> str:
-    """Phần đồng bộ kiểm tra DB (chạy trong thread riêng).
+
+def validate_schema_table(
+    node_input: TableSchema,
+    schema_table_drafts: list[dict] | None = None,
+    schema_table_index: int = 0,
+    schema_table_results: list[dict] | None = None,
+) -> Event:
+  """Kiểm chứng bảng do SchemaTableAgent viết so với bản nháp đã đo.
+
+  Kiểm chứng hoàn toàn bằng so sánh với bản nháp (không mở DB, vì bản
+  nháp đã đo từ DB): bảng phải đúng bảng đang xử lý, tập cột và mọi
+  giá trị đã đo phải giữ nguyên. Mô tả và role_hint được phép khác
+  bản nháp (đó chính là phần agent bổ sung); mô tả rỗng cũng đạt, vì
+  chất lượng văn bản không được đánh đổi bằng việc bác cả bảng đúng
+  dữ liệu.
+
+  Args:
+    node_input: Bảng đề xuất (đã coerce thành TableSchema).
+    schema_table_drafts: Danh sách bản nháp các bảng (lấy từ state).
+    schema_table_index: Vị trí bảng đang xử lý (lấy từ state).
+    schema_table_results: Kết quả các bảng đã xong (lấy từ state).
+
+  Returns:
+    Một Event duy nhất mang Verdict và state (thêm bảng vào kết quả
+    khi đạt; nhánh fail không ghi last_error — route node tự ghi).
+  """
+  drafts = schema_table_drafts or []
+  if schema_table_index < 0 or schema_table_index >= len(drafts):
+    return _verdict_event(
+        Verdict(
+            status="fail",
+            reason=(
+                f"Không tìm thấy bản nháp cho bảng thứ {schema_table_index}."
+            ),
+        ),
+        state={},
+    )
+  draft = drafts[schema_table_index]
+  mismatch = _measured_mismatch(node_input.model_dump(), draft)
+  if mismatch:
+    return _verdict_event(Verdict(status="fail", reason=mismatch), state={})
+  results = list(schema_table_results or [])
+  results.append(node_input.model_dump())
+  return _verdict_event(
+      Verdict(status="ok", reason="Bảng khớp bản nháp đã đo."),
+      state={"schema_table_results": results, "last_error": ""},
+  )
+
+
+def make_route_schema_table(config: IngestConfig) -> Callable:
+  """Tạo route node cho vòng lặp schema theo từng bảng.
+
+  Luật chuyển route khác 3 loop còn lại ở nhánh fail cuối: hết lượt
+  thử (lỗi lặp hoặc đủ giới hạn) thì KHÔNG fail cả shop mà fallback
+  bảng đang xử lý về bản nháp đo được rồi đi tiếp bảng sau. Lý do:
+  dữ liệu đo được của bảng vẫn đúng (validator chỉ bác phần mô tả/
+  role do model viết sai hoặc model không trả được JSON), nên giữ bảng
+  với mô tả rỗng và role unknown vẫn tốt hơn là hủy cả shop 17 bảng
+  vì một bảng thiếu văn bản. Bảng fallback được ghi tên vào
+  schema_table_fallbacks để assemble_schema chú thích vào notes.
+
+  Các route phát ra:
+  - "retry": validator fail nhưng còn lượt thử -> quay lại agent,
+    cùng bảng.
+  - "next": bảng xong (đạt hoặc fallback) và còn bảng sau -> quay
+    lại agent với bản nháp của bảng tiếp theo.
+  - "done": bảng cuối cùng xong -> sang init_schema_meta.
+
+  Bộ đếm schema_table_attempts được reset về 0 mỗi khi sang bảng mới,
+  vì giới hạn 3 lượt áp dụng cho từng bảng, không phải cho cả shop.
+
+  Args:
+    config: Cấu hình ingest (giới hạn loop).
+
+  Returns:
+    Hàm route node cho vòng lặp schema theo từng bảng.
+  """
+
+  def route_schema_table(ctx: object, node_input: Verdict) -> Event:
+    """Chuyển Verdict của bảng thành route cho vòng lặp từng bảng.
+
+    Args:
+      ctx: Context của workflow (framework bind tự động); route node
+        đọc danh sách bản nháp, vị trí, kết quả và bộ đếm từ ctx.state.
+      node_input: Verdict từ validate_schema_table.
 
     Returns:
-      Chuỗi rỗng khi đạt, ngược lại là lý do fail.
+      Một Event duy nhất mang output là Verdict, state cập nhật (vị
+      trí, kết quả, fallback, bộ đếm, bản nháp bảng tiếp theo) và
+      route "retry" / "next" / "done".
     """
-    connection = sqlite3.connect(f"file:{tmp_db_path}?mode=ro", uri=True)
-    try:
-      cursor = connection.cursor()
-      cursor.execute(
-          "SELECT name FROM sqlite_master "
-          "WHERE type = 'table' AND name NOT LIKE '\\_%' ESCAPE '\\' "
-          "AND name NOT LIKE 'sqlite_%'"
-      )
-      db_tables = {row[0] for row in cursor.fetchall()}
-      schema_tables = {table.sqlite_table for table in node_input.tables}
-      if schema_tables != db_tables:
-        return (
-            f"Bảng trong schema {sorted(schema_tables)} không khớp bảng "
-            f"trong DB {sorted(db_tables)}."
+    state = ctx.state  # type: ignore[attr-defined]
+    drafts = state.get("schema_table_drafts", [])
+    index = state.get("schema_table_index", 0)
+    if not isinstance(index, int):
+      index = 0
+    results = list(state.get("schema_table_results", []))
+    fallbacks = list(state.get("schema_table_fallbacks", []))
+    last_error = state.get("last_error", "")
+
+    def _advance(
+        new_results: list[dict], new_fallbacks: list[str]
+    ) -> Event:
+      """Sang bảng tiếp theo hoặc kết thúc vòng lặp khi hết bảng."""
+      new_index = index + 1
+      base_state: dict = {
+          "schema_table_index": new_index,
+          "schema_table_results": new_results,
+          "schema_table_fallbacks": new_fallbacks,
+          "schema_table_attempts": 0,
+          "last_error": "",
+      }
+      if new_index >= len(drafts):
+        return Event(
+            output=node_input.model_dump(),
+            state=base_state,
+            route="done",
         )
-      for table in node_input.tables:
-        cursor.execute(f'PRAGMA table_info("{table.sqlite_table}")')
-        db_columns = {row[1] for row in cursor.fetchall()}
-        schema_columns = {col.sqlite_name for col in table.columns}
-        if schema_columns != db_columns:
-          return (
-              f"Cột của bảng {table.sqlite_table} trong schema "
-              f"{sorted(schema_columns)} không khớp cột trong DB "
-              f"{sorted(db_columns)}."
-          )
-        for col in table.columns:
-          for sample in col.sample_values:
-            cursor.execute(
-                f'SELECT 1 FROM "{table.sqlite_table}" '
-                f"WHERE CAST(\"{col.sqlite_name}\" AS TEXT) = ? LIMIT 1",
-                (sample,),
-            )
-            if cursor.fetchone() is None:
-              return (
-                  f"Mẫu {sample!r} của cột {col.sqlite_name} (bảng "
-                  f"{table.sqlite_table}) không tồn tại trong DB."
-              )
-          if col.distinct_values is not None:
-            cursor.execute(
-                f'SELECT COUNT(DISTINCT "{col.sqlite_name}") '
-                f'FROM "{table.sqlite_table}"'
-            )
-            counted = cursor.fetchone()[0]
-            if counted != len(col.distinct_values):
-              return (
-                  f"Số distinct của cột {col.sqlite_name} (bảng "
-                  f"{table.sqlite_table}) đo được là {counted} nhưng schema "
-                  f"liệt kê {len(col.distinct_values)} giá trị."
-              )
-      return ""
-    finally:
-      connection.close()
+      base_state["schema_table_draft_text"] = json.dumps(
+          {"table": drafts[new_index]}, ensure_ascii=False
+      )
+      return Event(
+          output=node_input.model_dump(),
+          state=base_state,
+          route="next",
+      )
 
-  problem = await asyncio.to_thread(_check)
-  if problem:
-    return _fail(problem)
-  schema_dir = Path(output_dir) / "schemas"
-  schema_path = schema_dir / f"{business_id}.json"
+    if node_input.status == "ok":
+      # Validator đã cộng bảng vừa xong vào schema_table_results qua
+      # Event state của nó, và state đó đã áp dụng vào session trước
+      # khi route chạy (cùng cơ chế param binding theo state của mọi
+      # node), nên route chỉ việc đọc results từ ctx.state, không
+      # cộng thêm lần nữa.
+      return _advance(results, fallbacks)
+    reason = node_input.reason
+    raw_attempts = state.get("schema_table_attempts", 0)
+    attempts = raw_attempts if isinstance(raw_attempts, int) else 0
+    new_attempts = attempts + 1
+    if (reason and reason == last_error) or (
+        new_attempts >= config.max_loop_attempts
+    ):
+      # Hết lượt thử: fallback bảng này về bản nháp rồi đi tiếp.
+      if 0 <= index < len(drafts):
+        draft = drafts[index]
+        results.append(draft)
+        fallbacks.append(draft.get("table_id", ""))
+      return _advance(results, fallbacks)
+    return Event(
+        output=node_input.model_dump(),
+        state={
+            "schema_table_attempts": new_attempts,
+            "last_error": reason,
+        },
+        route="retry",
+    )
 
-  def _write() -> None:
-    """Ghi file schema (chạy trong thread riêng vì là I/O đĩa)."""
-    schema_dir.mkdir(parents=True, exist_ok=True)
-    text = node_input.model_dump_json(indent=2, ensure_ascii=False)
-    schema_path.write_text(text + "\n", encoding="utf-8")
+  route_schema_table.__name__ = "route_schema_table"
+  return route_schema_table
 
-  await asyncio.to_thread(_write)
+
+def validate_schema_meta(
+    node_input: ShopMeta,
+    schema_table_results: list[dict] | None = None,
+) -> Event:
+  """Kiểm chứng join_hints và notes do SchemaMetaAgent viết.
+
+  Chỉ kiểm tra tính tham chiếu: mỗi join_hint phải trỏ tới bảng và
+  cột có thật trong kết quả từng bảng (bảng/cột đã chốt ở vòng lặp
+  trước). Notes là văn bản tự do nên không kiểm nội dung. Join sai
+  tham chiếu sẽ sinh SQL lỗi ở bước trả lời nên phải bác để agent
+  viết lại; hết lượt thì fallback về rỗng (xem mark_schema_meta_fallback).
+
+  Args:
+    node_input: Phần meta đề xuất (đã coerce thành ShopMeta).
+    schema_table_results: Kết quả các bảng đã xong (lấy từ state).
+
+  Returns:
+    Một Event duy nhất mang Verdict và state (schema_meta khi đạt;
+    nhánh fail không ghi last_error — route node tự ghi).
+  """
+  tables: dict[str, set[str]] = {}
+  for table in schema_table_results or []:
+    tables[table.get("sqlite_table", "")] = {
+        col.get("sqlite_name", "") for col in table.get("columns", [])
+    }
+  for hint in node_input.join_hints:
+    for table_name, col_name, role in (
+        (hint.from_table, hint.from_column, "nguồn"),
+        (hint.to_table, hint.to_column, "đích"),
+    ):
+      if table_name not in tables:
+        return _verdict_event(
+            Verdict(
+                status="fail",
+                reason=f"Join_hint trỏ tới bảng {role} {table_name} không có thật.",
+            ),
+            state={},
+        )
+      if col_name not in tables[table_name]:
+        return _verdict_event(
+            Verdict(
+                status="fail",
+                reason=(
+                    f"Join_hint trỏ tới cột {col_name} không có trong bảng "
+                    f"{table_name}."
+                ),
+            ),
+            state={},
+        )
   return _verdict_event(
-      Verdict(status="ok", reason="Schema khớp DB tạm."),
+      Verdict(status="ok", reason="Join_hints tham chiếu đúng bảng/cột."),
+      state={"schema_meta": node_input.model_dump(), "last_error": ""},
+  )
+
+
+def make_route_schema_meta(config: IngestConfig) -> Callable:
+  """Tạo route node cho loop schema meta (tái dùng luật route chung).
+
+  Args:
+    config: Cấu hình ingest.
+
+  Returns:
+    Hàm route node cho loop schema meta.
+  """
+  return _make_route(config, "schema_meta_attempts")
+
+
+def mark_schema_meta_fallback() -> Event:
+  """Ghi fallback meta: join_hints và notes rỗng, không đoán quan hệ.
+
+  Join rỗng an toàn hơn join sai: bước sinh SQL vẫn truy vấn được từng
+  bảng riêng lẻ, chỉ thiếu gợi ý nối bảng. Đây là phương án an toàn
+  khi model hết lượt thử mà vẫn viết join sai tham chiếu.
+
+  Returns:
+    Một Event duy nhất mang output ghi nhận fallback và state
+    (schema_meta rỗng, cờ schema_meta_fallback).
+  """
+  return Event(
+      output={"fallback": "schema_meta_empty"},
       state={
-          "schema_path": str(schema_path),
-          "schema_json": node_input.model_dump(),
+          "schema_meta": {"join_hints": [], "notes": []},
+          "schema_meta_fallback": True,
           "last_error": "",
       },
   )
-
 
 def _make_route(
     config: IngestConfig, attempts_key: str
@@ -499,18 +695,6 @@ def make_route_merge(config: IngestConfig) -> Callable:
     Hàm route node cho loop gộp.
   """
   return _make_route(config, "merge_attempts")
-
-
-def make_route_schema(config: IngestConfig) -> Callable:
-  """Tạo route node cho loop schema.
-
-  Args:
-    config: Cấu hình ingest.
-
-  Returns:
-    Hàm route node cho loop schema.
-  """
-  return _make_route(config, "schema_attempts")
 
 
 def mark_header_fallback(raw_tables: list[dict] | None = None) -> Event:

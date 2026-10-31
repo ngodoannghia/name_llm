@@ -387,17 +387,27 @@ N5  write_sqlite [code]
     • Chưa publish: DB tạm chỉ thành DB chính thức khi N7 kiểm chứng đạt.
   │
   ▼
-N6  schema_loop ↺ [LLM + code]
-    • SchemaAgent [LLM]: nạp skill datamate-schema, sinh file schema của
-      shop qua output_schema ShopSchema (cấu trúc §6), từ: bảng đã gộp,
-      mẫu, distinct, README, bảng map tên.
-    • SchemaValidator [code]: kiểm JSON đúng schema; mọi bảng/cột trong DB
-      tạm đều có mặt trong schema và ngược lại; mọi sample_values và
-      distinct_values đều có thật trong DB (kiểm bằng truy vấn); distinct
-      liệt kê đầy đủ thì số lượng phải khớp với COUNT(DISTINCT) đo được.
-    • Sai → lỗi validator (kèm giá trị thật đo được) được đẩy lại cho
-      SchemaAgent viết lại. Hết 3 lần vẫn sai → shop FAILED (schema sai
-      thì workflow trả lời sẽ sinh SQL sai, không được xuất schema xấu).
+N6  schema_loop từng bảng ↺ [LLM + code] (đổi từ viết toàn bộ một lần
+    sau lỗi biz_123: JSON 17 bảng bị cắt dở ở dòng 1644 khi model phải
+    viết lại toàn bộ schema đã đo)
+    • SchemaTableAgent [LLM, một bảng mỗi lần]: nạp skill
+      datamate-schema (inline vào instruction, không tool), hoàn thiện
+      đúng một bảng qua output_schema TableSchema: giữ nguyên mọi giá
+      trị đã đo (tên, kiểu, mẫu, distinct, số dòng), chỉ bổ sung mô tả
+      tiếng Việt và role_hint.
+    • SchemaTableValidator [code]: so sánh mọi trường đã đo của bảng
+      với bản nháp (bản nháp đã đo từ DB nên tương đương kiểm bằng
+      truy vấn); sai → lỗi validator được đẩy lại cho agent viết lại
+      bảng đó. Hết 3 lần vẫn sai → fallback bảng đó về bản nháp đo
+      được (mô tả rỗng, role unknown) rồi đi tiếp bảng sau, không fail
+      cả shop vì dữ liệu đo được vẫn đúng.
+    • SchemaMetaAgent [LLM, một lần cuối]: chỉ nhận tóm tắt gọn (tên
+      bảng/cột/role, không mẫu/distinct), viết join_hints và notes cấp
+      shop qua output_schema ShopMeta; validator kiểm tham chiếu tới
+      bảng/cột có thật; hết 3 lần vẫn sai → fallback join/notes rỗng.
+    • assemble_schema [code]: ráp file schema duy nhất từ các bảng đã
+      chốt + phần meta (không model nào viết lại toàn bộ schema nữa);
+      không có bảng nào → không ghi file, shop FAILED ở N7 như trước.
   │
   ▼
 N7  validate_shop [code]

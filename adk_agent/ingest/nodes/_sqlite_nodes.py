@@ -21,7 +21,7 @@ import pandas as pd
 from google.adk import Event
 
 from .._config import IngestConfig
-from .._models import IngestReport, Verdict
+from .._models import IngestReport, ShopSchema, TableSchema, Verdict
 
 
 def make_write_sqlite_tmp(config: IngestConfig) -> Callable:
@@ -242,6 +242,189 @@ def make_write_sqlite_tmp(config: IngestConfig) -> Callable:
     return Event(output=output, state=state)
 
   return write_sqlite_tmp
+
+
+async def init_schema_tables(
+    schema_draft: dict | None = None,
+) -> Event:
+  """Khởi tạo vòng lặp schema theo từng bảng từ bản nháp đã đo.
+
+  Node này là gate của vòng lặp từng bảng: nó tách danh sách bảng
+  trong bản nháp thành state riêng cho vòng lặp, đặt vị trí về 0 và
+  chuẩn bị bản nháp JSON của bảng đầu tiên cho agent. Khi shop không
+  có bảng nào thì route "empty" đi thẳng tới assemble_schema (nơi
+  này sẽ không ghi file, để validate_shop fail shop như trước), tránh
+  việc agent chạy với input rỗng rồi raise vì output không coerce
+  được — node raise sẽ dừng cả workflow, khác với fail-as-route.
+
+  Args:
+    schema_draft: Bản nháp schema {"tables": [...]} (lấy từ state).
+
+  Returns:
+    Một Event duy nhất mang state vòng lặp và route "tables" (có
+    bảng) hoặc "empty" (không có bảng nào).
+  """
+  drafts = (schema_draft or {}).get("tables", [])
+  base_state: dict = {
+      "schema_table_drafts": drafts,
+      "schema_table_index": 0,
+      "schema_table_results": [],
+      "schema_table_fallbacks": [],
+      "schema_table_attempts": 0,
+  }
+  if not drafts:
+    return Event(output={"schema_tables": 0}, state=base_state, route="empty")
+  base_state["schema_table_draft_text"] = json.dumps(
+      {"table": drafts[0]}, ensure_ascii=False
+  )
+  return Event(
+      output={"schema_tables": len(drafts)},
+      state=base_state,
+      route="tables",
+  )
+
+
+async def init_schema_meta(
+    schema_table_results: list[dict] | None = None,
+) -> Event:
+  """Chuẩn bị tóm tắt gọn cho agent meta từ kết quả từng bảng.
+
+  Tóm tắt chỉ giữ tên bảng, tên cột và role_hint — cố tình bỏ mẫu và
+  distinct để input của agent meta luôn nhỏ (dù shop có 17 bảng thì
+  tóm tắt cũng chỉ vài nghìn ký tự), vì agent meta chỉ cần tên và vai
+  trò cột để suy luận join và bẫy, không cần giá trị mẫu.
+
+  Args:
+    schema_table_results: Kết quả các bảng đã chốt (lấy từ state).
+
+  Returns:
+    Một Event duy nhất mang state schema_meta_summary_text (JSON
+    {"tables_summary": [...]}).
+  """
+  summary = {
+      "tables_summary": [
+          {
+              "sqlite_table": table.get("sqlite_table", ""),
+              "columns": [
+                  {
+                      "sqlite_name": col.get("sqlite_name", ""),
+                      "role_hint": col.get("role_hint", "unknown"),
+                  }
+                  for col in table.get("columns", [])
+              ],
+          }
+          for table in (schema_table_results or [])
+      ]
+  }
+  return Event(
+      output={"tables_summary": len(summary["tables_summary"])},
+      state={
+          "schema_meta_summary_text": json.dumps(summary, ensure_ascii=False)
+      },
+  )
+
+
+def make_assemble_schema(config: IngestConfig) -> Callable:
+  """Tạo node assemble_schema đã gắn cấu hình (tên model ghi vào schema).
+
+  Args:
+    config: Cấu hình ingest; model_id của nó được ghi vào trường
+      model của file schema để truy vết model nào đã sinh schema
+      (trước đây agent tự ghi tên mẫu từ ví dụ trong skill).
+
+  Returns:
+    Hàm node assemble_schema dùng được trực tiếp trong edges.
+  """
+
+  async def assemble_schema(
+      business_id: str = "",
+      output_dir: str = "",
+      shop_dir: str = "",
+      schema_table_results: list[dict] | None = None,
+      schema_meta: dict | None = None,
+      schema_table_fallbacks: list[str] | None = None,
+  ) -> Event:
+    """Ráp file schema cuối từ kết quả từng bảng và phần meta.
+
+    Node này là nơi DUY NHẤT ghi file schema: nó lấy các bảng đã
+    chốt ở vòng lặp từng bảng (giá trị đo giữ nguyên, mô tả/role do
+    model bổ sung, bảng fallback thì giữ nguyên bản nháp), cộng phần
+    meta (join_hints, notes) rồi ghi một file JSON duy nhất. Nhờ ráp
+    bằng code mà model không bao giờ phải viết lại toàn bộ schema:
+    mỗi lần gọi model chỉ xử lý một bảng hoặc một phần meta nhỏ.
+
+    Args:
+      business_id: Id shop (lấy từ state).
+      output_dir: Thư mục ghi kết quả (lấy từ state).
+      shop_dir: Thư mục dữ liệu gốc của shop (lấy từ state, dùng để
+        liệt kê tên file nguồn thật).
+      schema_table_results: Kết quả các bảng đã chốt (lấy từ state).
+      schema_meta: Phần meta đã chốt (lấy từ state, có thể rỗng khi
+        fallback).
+      schema_table_fallbacks: Id các bảng fallback về bản nháp (lấy
+        từ state, dùng để chú thích vào notes).
+
+    Returns:
+      Một Event duy nhất mang output Verdict (ok khi ghi được file,
+      fail khi không có bảng nào) và state schema_path (rỗng khi
+      không ghi file, để validate_shop fail shop như trước).
+    """
+    results = schema_table_results or []
+    if not results:
+      return Event(
+          output=Verdict(
+              status="fail",
+              reason="Không có bảng nào để ráp schema.",
+          ).model_dump(),
+          state={"schema_path": ""},
+      )
+    meta = schema_meta or {}
+    notes = list(meta.get("notes", []))
+    for table_id in schema_table_fallbacks or []:
+      notes.append(
+          f"Bảng {table_id} dùng bản nháp đo được (model hết lượt thử, "
+          "chưa có mô tả)."
+      )
+    source_files: list[str] = []
+    if shop_dir:
+      shop_path = Path(shop_dir)
+      if shop_path.is_dir():
+        # Chỉ liệt kê file dữ liệu: README của shop là tài liệu mô tả,
+        # không phải bảng dữ liệu, nên không đưa vào source_files.
+        source_files = sorted(
+            entry.name
+            for entry in shop_path.iterdir()
+            if entry.is_file() and entry.name.lower() != "readme.md"
+        )
+    schema = ShopSchema(
+        business_id=business_id,
+        source_files=source_files,
+        generated_at=datetime.now(timezone.utc).isoformat(),
+        model=config.model_id,
+        tables=[TableSchema(**table) for table in results],
+        join_hints=meta.get("join_hints", []),
+        notes=notes,
+    )
+    schema_dir = Path(output_dir) / "schemas"
+    schema_path = schema_dir / f"{business_id}.json"
+
+    def _write() -> None:
+      """Ghi file schema (chạy trong thread riêng vì là I/O đĩa)."""
+      schema_dir.mkdir(parents=True, exist_ok=True)
+      text = schema.model_dump_json(indent=2, ensure_ascii=False)
+      schema_path.write_text(text + "\n", encoding="utf-8")
+
+    await asyncio.to_thread(_write)
+    return Event(
+        output=Verdict(status="ok", reason="Schema đã ráp xong.").model_dump(),
+        state={
+            "schema_path": str(schema_path),
+            "schema_json": schema.model_dump(),
+            "last_error": "",
+        },
+    )
+
+  return assemble_schema
 
 
 async def validate_shop(

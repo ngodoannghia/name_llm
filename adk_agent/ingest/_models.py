@@ -232,6 +232,24 @@ class ShopSchema(BaseModel):
   """Các bẫy của shop (đếm trùng, giá theo ngày, số dư chạy...) bằng tiếng Việt."""
 
 
+class ShopMeta(BaseModel):
+  """Phần cấp shop của schema: join_hints và notes (output của agent meta).
+
+  Model này chỉ chứa phần model phải suy luận ở cấp shop, tách khỏi
+  TableSchema để workflow có thể gọi agent meta một lần duy nhất sau
+  khi đã xong từng bảng: input của nó chỉ là tóm tắt bảng/cột/role,
+  không kèm mẫu hay distinct nên output luôn nhỏ.
+  """
+
+  model_config = ConfigDict(extra="forbid")
+
+  join_hints: list[JoinHint] = Field(default_factory=list)
+  """Danh sách gợi ý join có bằng chứng (tên cột chung, vai trò khóa)."""
+
+  notes: list[str] = Field(default_factory=list)
+  """Các bẫy của shop bằng tiếng Việt, rỗng khi không phát hiện bẫy."""
+
+
 class RawTable(BaseModel):
   """Kết quả quét một bảng nguồn: chỉ metadata và mẫu, không chứa toàn bộ dữ liệu."""
 

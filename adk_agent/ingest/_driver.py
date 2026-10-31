@@ -87,7 +87,17 @@ async def run_one_shop(
   log_dir.mkdir(parents=True, exist_ok=True)
   log_path = log_dir / f"{business_id}.jsonl"
   resolved_model = FakeLlm() if use_fake else model
-  workflow = build_ingest_workflow(config=config, model=resolved_model)  # type: ignore[arg-type]
+  effective_config = config
+  if not use_fake and resolved_model is not None and not config.model_id:
+    # Ghi tên model thật vào config để assemble_schema ghi đúng tên
+    # model vào trường model của file schema (truy vết), thay vì để
+    # agent tự ghi tên mẫu từ ví dụ trong skill như trước. Chỉ áp
+    # dụng khi model là instance có thuộc tính model (ví dụ LiteLlm);
+    # model dạng chuỗi đã nằm trong config.model_id từ CLI.
+    model_name = getattr(resolved_model, "model", "")
+    if isinstance(model_name, str) and model_name:
+      effective_config = config.model_copy(update={"model_id": model_name})
+  workflow = build_ingest_workflow(config=effective_config, model=resolved_model)  # type: ignore[arg-type]
   session_service = get_session_service("memory")
   artifact_service = get_artifact_service(output_dir / "artifacts")
   runner = Runner(

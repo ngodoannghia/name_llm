@@ -3,8 +3,12 @@
 logic production).
 
 FakeLlm là subclass BaseLlm trả response canned theo nội dung request:
-- Request chứa bản nháp schema -> sinh ShopSchema từ bản nháp (mô tả
-  chung chung, role_hint unknown, join_hints rỗng) để validator pass.
+- Request chứa bản nháp MỘT bảng -> sinh TableSchema từ bản nháp đó
+  (mô tả chung chung, role_hint unknown) để validator từng bảng pass.
+- Request chứa tóm tắt meta -> sinh ShopMeta rỗng (join_hints và
+  notes rỗng) để validator meta pass.
+- Request chứa bản nháp schema đầy đủ (đường cũ, giữ cho test đơn vị)
+  -> sinh ShopSchema từ bản nháp.
 - Request chứa danh sách bảng mơ hồ -> sinh HeaderProposal từ header
   ứng viên.
 - Request chứa tóm tắt bảng có chữ ký -> sinh MergeProposal dạng giữ
@@ -258,12 +262,89 @@ class FakeLlm(BaseLlm):
         "singles": [],
     }
 
+  def _table_from_draft(self, text: str) -> dict | None:
+    """Sinh TableSchema từ bản nháp MỘT bảng trong request.
+
+    Dùng cho vòng lặp schema theo từng bảng: input của agent bảng là
+    JSON {"table": {...}} chứa đúng một bảng đã đo. Fake chỉ bổ sung
+    mô tả chung chung và giữ nguyên mọi giá trị đã đo, để validator
+    từng bảng pass.
+
+    Args:
+      text: Toàn bộ text của request.
+
+    Returns:
+      Dict TableSchema, hoặc None nếu không tìm thấy bản nháp một bảng.
+    """
+    payload = _extract_json_object_with_key(text, "table")
+    if payload is None:
+      return None
+    table = payload.get("table")
+    if not isinstance(table, dict) or not isinstance(
+        table.get("columns"), list
+    ):
+      return None
+    out_columns = []
+    for col in table["columns"]:
+      if not isinstance(col, dict):
+        continue
+      out_columns.append(
+          {
+              "original_name": col.get("original_name", ""),
+              "sqlite_name": col.get("sqlite_name", ""),
+              "type": col.get("type", "TEXT"),
+              "description_vi": (
+                  f"Cột {col.get('sqlite_name', '')} của bảng "
+                  f"{table.get('sqlite_table', '')}."
+              ),
+              "role_hint": "unknown",
+              "sample_values": col.get("sample_values", []),
+              "distinct_count": col.get("distinct_count", 0),
+              "distinct_values": col.get("distinct_values"),
+              "nullable_rate": col.get("nullable_rate", 0.0),
+          }
+      )
+    return {
+        "table_id": table.get("table_id", ""),
+        "original_names": table.get("original_names", []),
+        "source_sheets": table.get("source_sheets", []),
+        "sqlite_table": table.get("sqlite_table", ""),
+        "row_count": table.get("row_count", 0),
+        "description_vi": (
+            f"Bảng {table.get('sqlite_table', '')} của shop."
+        ),
+        "columns": out_columns,
+        "date_range": table.get("date_range", {}),
+    }
+
+  def _meta_from_summary(self, text: str) -> dict | None:
+    """Sinh ShopMeta rỗng từ tóm tắt meta trong request.
+
+    Dùng cho agent meta cuối vòng lặp schema: input của nó là JSON
+    {"tables_summary": [...]} gọn nhẹ. Fake trả join_hints và notes
+    rỗng (an toàn, validator meta chỉ kiểm tham chiếu nên rỗng là
+    đạt) vì fake không đánh giá chất lượng suy luận join.
+
+    Args:
+      text: Toàn bộ text của request.
+
+    Returns:
+      Dict ShopMeta rỗng, hoặc None nếu không tìm thấy tóm tắt meta.
+    """
+    payload = _extract_json_object_with_key(text, "tables_summary")
+    if payload is None:
+      return None
+    return {"join_hints": [], "notes": []}
+
   def _dispatch(self, text: str) -> dict:
     """Chọn response theo nội dung request (thứ tự ưu tiên cố định).
 
-    Thứ tự quan trọng: bản nháp schema chứa key "tables" giống tóm tắt
-    bảng, nên phải kiểm tra schema trước (nhận diện bằng distinct_count
-    trong cột); tiếp theo là bảng mơ hồ, cuối cùng là tóm tắt bảng.
+    Thứ tự quan trọng: nhánh từng bảng và nhánh meta phải kiểm tra
+    TRƯỚC nhánh schema cũ, vì bản nháp một bảng cũng chứa
+    distinct_count và tóm tắt meta cũng nằm trong text có thể chứa
+    key "tables" ở nơi khác. Sau đó mới tới bản nháp schema cũ (nhận
+    diện bằng distinct_count trong cột), bảng mơ hồ, cuối cùng là
+    tóm tắt bảng.
 
     Args:
       text: Toàn bộ text của request.
@@ -273,8 +354,14 @@ class FakeLlm(BaseLlm):
 
     Raises:
       ValueError: Khi request không khớp mẫu nào (test dùng FakeLlm phải
-        gửi đúng một trong ba dạng input trên, hoặc dùng canned).
+        gửi đúng một trong các dạng input trên, hoặc dùng canned).
     """
+    table = self._table_from_draft(text)
+    if table is not None:
+      return table
+    meta = self._meta_from_summary(text)
+    if meta is not None:
+      return meta
     if "distinct_count" in text:
       schema = self._schema_from_draft(text)
       if schema is not None:

@@ -85,16 +85,19 @@ workspace/datasets/datamate/adk_agent/
       __init__.py           # không export node lẻ; workflow lấy node từ
                             # _workflow.py, không import node trực tiếp
       _scan_nodes.py        # init_shop, scan_sheets, scan_sqlite
-      _validate_nodes.py    # validate_header, validate_merge, validate_schema
-      _route_nodes.py       # route_header, route_merge, route_schema
+      _validate_nodes.py    # validate_header, validate_merge,
+                            # validate_schema_table, validate_schema_meta
+                            # (route node nằm cùng file với validator)
       _clean_nodes.py       # clean_tables (gọi normalizers của phase1)
-      _sqlite_nodes.py      # write_sqlite_tmp, validate_shop, publish_shop,
-                            # finalize_shop
+      _sqlite_nodes.py      # write_sqlite_tmp, init_schema_tables,
+                            # init_schema_meta, assemble_schema,
+                            # validate_shop, publish_shop, finalize_shop
     agents/
       __init__.py           # không export agent lẻ
       _header_agent.py      # HeaderAgent (một agent một file)
       _merge_agent.py       # MergeAgent
-      _schema_agent.py      # SchemaAgent
+      _schema_table_agent.py # SchemaTableAgent (một bảng mỗi lần)
+      _schema_meta_agent.py # SchemaMetaAgent (join_hints + notes cấp shop)
     _callbacks.py           # before_tool / after_tool / on_tool_error
     _skills_loader.py       # Nạp 4 skill local, kiểm tra tên + frontmatter
     _workflow.py            # build_ingest_workflow() -> Workflow (duy nhất
@@ -369,12 +372,17 @@ header_loop_route --(retry)--> header_agent -> validate_header -> header_loop_ro
 header_loop_route --(ok)-----> merge_agent -> validate_merge -> merge_loop_route
 header_loop_route --(fail)---> mark_header_fallback -> merge_agent
 merge_loop_route --(retry)--> merge_agent
-merge_loop_route --(ok)-----> clean_tables -> write_sqlite_tmp -> schema_agent
+merge_loop_route --(ok)-----> clean_tables -> write_sqlite_tmp -> init_schema_tables
 merge_loop_route --(fail)---> mark_merge_fallback -> clean_tables
-schema_agent -> validate_schema -> schema_loop_route
-schema_loop_route --(retry)--> schema_agent
-schema_loop_route --(ok)-----> validate_shop -> publish_shop -> finalize_shop
-schema_loop_route --(fail)---> mark_shop_failed -> finalize_shop
+init_schema_tables --(tables)--> schema_table_agent -> validate_schema_table -> route_schema_table
+init_schema_tables --(empty)---> assemble_schema
+route_schema_table --(retry)--> schema_table_agent (cùng bảng)
+route_schema_table --(next)---> schema_table_agent (bảng sau)
+route_schema_table --(done)---> init_schema_meta -> schema_meta_agent -> validate_schema_meta -> route_schema_meta
+route_schema_meta --(retry)--> schema_meta_agent
+route_schema_meta --(ok)-----> assemble_schema
+route_schema_meta --(fail)---> mark_schema_meta_fallback -> assemble_schema
+assemble_schema -> validate_shop -> publish_shop -> finalize_shop
 validate_shop --(fail)----> mark_shop_failed -> finalize_shop
 ```
 
@@ -402,7 +410,7 @@ source 2.13.0):
 
 ### 6.2. Loop — bộ đếm bằng state, route bằng chuỗi
 
-Mỗi loop (header, merge, schema) có đúng ba thành phần, không thêm không bớt:
+Mỗi loop (header, merge, schema meta) có đúng ba thành phần, không thêm không bớt:
 
 1. **Agent node** (LlmAgent, `single_turn`, `output_schema` + `output_key`).
 2. **Validator node** (function node thuần code): nhận output của agent
@@ -410,6 +418,11 @@ Mỗi loop (header, merge, schema) có đúng ba thành phần, không thêm kh�
 3. **Route node** (function node): nhận `Verdict`, đọc bộ đếm trong state,
    trả `Event(output=<verdict>, route=<chuỗi>)` với chuỗi là một trong
    `"ok"`, `"retry"`, `"fail"`.
+
+Loop schema theo từng bảng dùng cùng ba thành phần nhưng route phát
+`"retry"` (cùng bảng), `"next"` (bảng sau) và `"done"` (hết bảng),
+vì một vòng lặp phải đi qua nhiều bảng chứ không chỉ lặp lại một
+agent cho tới khi đạt.
 
 Bộ đếm: route node tăng `attempts` và ghi lại **qua
 `Event(state={...})`**, không gán trực tiếp `ctx.state[...] = ...`.
@@ -429,8 +442,13 @@ cùng một lỗi lặp lại 2 lần liên tiếp -> "fail" (không chờ đủ
 ```
 
 Nhánh `"fail"`: header/merge đi tới node fallback an toàn đã kiểm chứng
-(luật scoring / không gộp) và ghi rõ vào log; schema đi tới
-`mark_shop_failed` (không publish DB, không xuất schema xấu). **Không
+(luật scoring / không gộp) và ghi rõ vào log; schema meta đi tới
+`mark_schema_meta_fallback` (join_hints và notes rỗng); chỉ khi
+assemble_schema không ráp được bảng nào (shop không có bảng) thì
+validate_shop mới fail và đi tới `mark_shop_failed` (không publish DB,
+không xuất schema xấu). Riêng loop từng bảng KHÔNG có nhánh fail cả
+shop: hết lượt thử thì fallback bảng đó về bản nháp đo được rồi đi
+tiếp bảng sau, vì dữ liệu đo được vẫn đúng, chỉ thiếu mô tả. **Không
 nhánh nào raise exception để kết thúc loop**, vì node raise sẽ dừng cả
 workflow (xem §2 nguyên tắc 4 và plan §2.4 mục 3).
 
@@ -444,8 +462,10 @@ workflow (xem §2 nguyên tắc 4 và plan §2.4 mục 3).
 | `headers_final` | `validate_header` (qua route `"ok"`) | MergeAgent, clean_tables | Dict bảng -> header chốt |
 | `merge_groups` | `validate_merge` (qua route `"ok"`) | clean_tables | List nhóm gộp chốt |
 | `clean_stats` | `clean_tables` | `validate_shop`, `finalize_shop` | `CleanStats` đã dump |
-| `tmp_db_path`, `schema_path` | `write_sqlite_tmp`, `schema_agent` | `validate_shop`, `publish_shop` | Đường dẫn tạm, chưa phải DB chính thức |
-| `header_attempts`, `merge_attempts`, `schema_attempts` | route node tương ứng | chính route node đó | Bộ đếm vòng, ghi qua `Event(state=...)` |
+| `tmp_db_path`, `schema_path` | `write_sqlite_tmp`, `assemble_schema` | `validate_shop`, `publish_shop` | Đường dẫn tạm, chưa phải DB chính thức |
+| `schema_table_drafts`, `schema_table_index`, `schema_table_results`, `schema_table_fallbacks`, `schema_table_draft_text` | `init_schema_tables`, `validate_schema_table`, `route_schema_table` | agent bảng, route bảng, `assemble_schema` | Trạng thái vòng lặp từng bảng |
+| `schema_meta_summary_text`, `schema_meta` | `init_schema_meta`, `validate_schema_meta` | agent meta, `assemble_schema` | Tóm tắt gọn và kết quả meta cấp shop |
+| `header_attempts`, `merge_attempts`, `schema_table_attempts`, `schema_meta_attempts` | route node tương ứng | chính route node đó | Bộ đếm vòng, ghi qua `Event(state=...)`; bộ đếm bảng reset về 0 khi sang bảng mới |
 | `last_error` | validator node | route node, `finalize_shop` | Lỗi validator gần nhất + giá trị thật đo được, để route node phát hiện lỗi lặp và để log ghi lại |
 | `shop_status` | `finalize_shop` | driver (đọc lại session sau chạy) | `"ok"` hoặc `"failed"` + lý do |
 

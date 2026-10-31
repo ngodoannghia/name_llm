@@ -8,29 +8,30 @@ tiếp với ctx giả là cách kiểm chứng luật route độc lập với 
 
 from __future__ import annotations
 
-import json
-import sqlite3
-from pathlib import Path
 from types import SimpleNamespace
 
 from ingest._config import IngestConfig
 from ingest._models import (
     HeaderProposal,
     MergeProposal,
-    ShopSchema,
+    ShopMeta,
     TableHeader,
+    TableSchema,
     MergeGroup,
 )
 from ingest.nodes._validate_nodes import (
     make_route_header,
     make_route_merge,
-    make_route_schema,
+    make_route_schema_meta,
+    make_route_schema_table,
     mark_header_fallback,
     mark_merge_fallback,
+    mark_schema_meta_fallback,
     mark_shop_failed,
     validate_header,
     validate_merge,
-    validate_schema,
+    validate_schema_meta,
+    validate_schema_table,
 )
 from ingest.nodes._validate_nodes import Verdict
 
@@ -185,12 +186,58 @@ def test_route_fail_early_on_repeated_error() -> None:
   assert second.actions.route == "fail"
 
 
-def test_route_schema_uses_own_counter() -> None:
-  """Route schema dùng bộ đếm riêng (schema_attempts, không lẫn header)."""
-  route = make_route_schema(CONFIG)
-  event = _route(route, Verdict(status="fail", reason="lỗi S"), {})
+def test_route_schema_table_advances_and_done() -> None:
+  """Route bảng ok thì sang bảng sau, hết bảng thì done."""
+  route = make_route_schema_table(CONFIG)
+  drafts = [{"table_id": "a", "sqlite_table": "a"}, {"table_id": "b", "sqlite_table": "b"}]
+  event = _route(
+      route,
+      Verdict(status="ok", reason="đạt"),
+      {"schema_table_drafts": drafts, "schema_table_index": 0,
+       "schema_table_results": [], "schema_table_fallbacks": []},
+  )
+  assert event.actions.route == "next"
+  assert event.actions.state_delta["schema_table_index"] == 1
+  assert "b" in event.actions.state_delta["schema_table_draft_text"]
+  event = _route(
+      route,
+      Verdict(status="ok", reason="đạt"),
+      {"schema_table_drafts": drafts, "schema_table_index": 1,
+       "schema_table_results": [{"table_id": "a"}],
+       "schema_table_fallbacks": []},
+  )
+  assert event.actions.route == "done"
+
+
+def test_route_schema_table_fallback_after_3() -> None:
+  """Route bảng fail đủ 3 lần thì fallback về bản nháp rồi đi tiếp."""
+  route = make_route_schema_table(CONFIG)
+  drafts = [{"table_id": "a", "sqlite_table": "a"}, {"table_id": "b", "sqlite_table": "b"}]
+  state: dict = {"schema_table_drafts": drafts, "schema_table_index": 0,
+                 "schema_table_results": [], "schema_table_fallbacks": []}
+  for reason in ("lỗi A", "lỗi B", "lỗi C"):
+    event = _route(route, Verdict(status="fail", reason=reason), state)
+    state = dict(state)
+    state.update(event.actions.state_delta)
+  assert event.actions.route == "next"
+  assert event.actions.state_delta["schema_table_results"] == [drafts[0]]
+  assert event.actions.state_delta["schema_table_fallbacks"] == ["a"]
+  assert event.actions.state_delta["schema_table_attempts"] == 0
+
+
+def test_route_schema_table_repeated_error_fallback_early() -> None:
+  """Route bảng fail lặp đúng lỗi thì fallback sớm, không chờ đủ 3."""
+  route = make_route_schema_table(CONFIG)
+  drafts = [{"table_id": "a", "sqlite_table": "a"}]
+  state: dict = {"schema_table_drafts": drafts, "schema_table_index": 0,
+                 "schema_table_results": [], "schema_table_fallbacks": []}
+  event = _route(route, Verdict(status="fail", reason="lỗi X"), state)
   assert event.actions.route == "retry"
-  assert "schema_attempts" in event.actions.state_delta
+  state = dict(state)
+  state.update(event.actions.state_delta)
+  event = _route(route, Verdict(status="fail", reason="lỗi X"), state)
+  assert event.actions.route == "done"
+  assert event.actions.state_delta["schema_table_fallbacks"] == ["a"]
 
 
 def test_mark_fallbacks() -> None:
@@ -206,100 +253,122 @@ def test_mark_fallbacks() -> None:
   assert event.actions.state_delta["shop_error"] == "schema sai"
 
 
-def _make_tmp_db(path: Path) -> None:
-  """Tạo DB tạm giả lập với một bảng don có 2 dòng."""
-  connection = sqlite3.connect(str(path))
-  connection.execute("CREATE TABLE don (ma TEXT, tien INTEGER)")
-  connection.executemany("INSERT INTO don VALUES (?, ?)", [("DH1", 100), ("DH2", 200)])
-  connection.commit()
-  connection.close()
-
-
-def _schema_for_db() -> ShopSchema:
-  """Schema đúng cho DB giả lập ở trên."""
-  return ShopSchema(
-      business_id="biz_test",
-      tables=[
+def _draft_table() -> dict:
+  """Bản nháp một bảng don (dạng dict như write_sqlite_tmp tạo ra)."""
+  return {
+      "table_id": "don",
+      "original_names": ["don"],
+      "source_sheets": ["don"],
+      "sqlite_table": "don",
+      "row_count": 2,
+      "description_vi": "",
+      "columns": [
           {
-              "table_id": "don",
-              "original_names": ["don"],
-              "source_sheets": ["don"],
-              "sqlite_table": "don",
-              "row_count": 2,
-              "description_vi": "Bảng đơn.",
-              "columns": [
-                  {
-                      "original_name": "ma",
-                      "sqlite_name": "ma",
-                      "type": "TEXT",
-                      "description_vi": "Mã đơn.",
-                      "role_hint": "order_id",
-                      "sample_values": ["DH1"],
-                      "distinct_count": 2,
-                      "distinct_values": ["DH1", "DH2"],
-                      "nullable_rate": 0.0,
-                  },
-                  {
-                      "original_name": "tien",
-                      "sqlite_name": "tien",
-                      "type": "INTEGER",
-                      "description_vi": "Tiền.",
-                      "role_hint": "money",
-                      "sample_values": ["100"],
-                      "distinct_count": 2,
-                      "distinct_values": ["100", "200"],
-                      "nullable_rate": 0.0,
-                  },
-              ],
-              "date_range": {},
-          }
+              "original_name": "ma",
+              "sqlite_name": "ma",
+              "type": "TEXT",
+              "description_vi": "",
+              "role_hint": "unknown",
+              "sample_values": ["DH1"],
+              "distinct_count": 2,
+              "distinct_values": ["DH1", "DH2"],
+              "nullable_rate": 0.0,
+          },
+          {
+              "original_name": "tien",
+              "sqlite_name": "tien",
+              "type": "INTEGER",
+              "description_vi": "",
+              "role_hint": "unknown",
+              "sample_values": ["100"],
+              "distinct_count": 2,
+              "distinct_values": ["100", "200"],
+              "nullable_rate": 0.0,
+          },
       ],
-      join_hints=[],
-      notes=[],
-  )
+      "date_range": {},
+  }
 
 
-async def test_validate_schema_ok_writes_file(tmp_path: Path) -> None:
-  """validate_schema đạt thì ghi file schema vào output_dir/schemas."""
-  db_path = tmp_path / "biz_test.tmp.db"
-  _make_tmp_db(db_path)
-  event = await validate_schema(
-      _schema_for_db(),
-      tmp_db_path=str(db_path),
-      business_id="biz_test",
-      output_dir=str(tmp_path),
+def _table_for_draft() -> TableSchema:
+  """Bảng do agent viết: giữ nguyên giá trị đo, thêm mô tả và role."""
+  draft = _draft_table()
+  draft["description_vi"] = "Bảng đơn."
+  draft["columns"][0]["description_vi"] = "Mã đơn."
+  draft["columns"][0]["role_hint"] = "order_id"
+  draft["columns"][1]["description_vi"] = "Tiền."
+  draft["columns"][1]["role_hint"] = "money"
+  return TableSchema(**draft)
+
+
+def test_validate_schema_table_ok() -> None:
+  """validate_schema_table đạt khi agent giữ nguyên giá trị đã đo."""
+  event = validate_schema_table(
+      _table_for_draft(),
+      schema_table_drafts=[_draft_table()],
+      schema_table_index=0,
+      schema_table_results=[],
   )
   assert event.output["status"] == "ok"
-  schema_path = Path(event.actions.state_delta["schema_path"])
-  assert schema_path.is_file()
-  parsed = json.loads(schema_path.read_text(encoding="utf-8"))
-  assert parsed["business_id"] == "biz_test"
+  results = event.actions.state_delta["schema_table_results"]
+  assert len(results) == 1
+  assert results[0]["sqlite_table"] == "don"
+  assert results[0]["columns"][0]["role_hint"] == "order_id"
 
 
-async def test_validate_schema_bad_sample_fail(tmp_path: Path) -> None:
-  """validate_schema bác khi mẫu không tồn tại trong DB và không ghi file."""
-  db_path = tmp_path / "biz_test.tmp.db"
-  _make_tmp_db(db_path)
-  schema = _schema_for_db()
-  schema.tables[0].columns[0].sample_values = ["KHONG_CO"]
-  event = await validate_schema(
-      schema,
-      tmp_db_path=str(db_path),
-      business_id="biz_test",
-      output_dir=str(tmp_path),
+def test_validate_schema_table_changed_sample_fail() -> None:
+  """validate_schema_table bác khi agent sửa mẫu đã đo."""
+  table = _table_for_draft()
+  table.columns[0].sample_values = ["KHONG_CO"]
+  event = validate_schema_table(
+      table,
+      schema_table_drafts=[_draft_table()],
+      schema_table_index=0,
+      schema_table_results=[],
   )
   assert event.output["status"] == "fail"
-  assert not (tmp_path / "schemas" / "biz_test.json").exists()
+  assert "sample_values" in event.output["reason"]
 
 
-async def test_validate_schema_wrong_business_fail(tmp_path: Path) -> None:
-  """validate_schema bác khi business_id trong schema khác shop đang chạy."""
-  db_path = tmp_path / "biz_test.tmp.db"
-  _make_tmp_db(db_path)
-  event = await validate_schema(
-      _schema_for_db(),
-      tmp_db_path=str(db_path),
-      business_id="biz_khac",
-      output_dir=str(tmp_path),
+def test_validate_schema_meta_ok_and_bad_reference() -> None:
+  """validate_schema_meta đạt khi join đúng tham chiếu, bác khi sai."""
+  results = [_table_for_draft().model_dump()]
+  good = ShopMeta(
+      join_hints=[
+          {
+              "from_table": "don",
+              "from_column": "ma",
+              "to_table": "don",
+              "to_column": "ma",
+              "evidence": "cùng mã đơn",
+          }
+      ],
+      notes=["Bẫy ví dụ."],
   )
+  event = validate_schema_meta(good, schema_table_results=results)
+  assert event.output["status"] == "ok"
+  assert event.actions.state_delta["schema_meta"]["notes"] == ["Bẫy ví dụ."]
+  bad = ShopMeta(
+      join_hints=[
+          {
+              "from_table": "don",
+              "from_column": "ma",
+              "to_table": "khong_co",
+              "to_column": "ma",
+              "evidence": "",
+          }
+      ],
+      notes=[],
+  )
+  event = validate_schema_meta(bad, schema_table_results=results)
   assert event.output["status"] == "fail"
+
+
+def test_mark_schema_meta_fallback() -> None:
+  """Fallback meta ghi join và notes rỗng, không đoán quan hệ."""
+  event = mark_schema_meta_fallback()
+  assert event.actions.state_delta["schema_meta"] == {
+      "join_hints": [],
+      "notes": [],
+  }
+  assert event.actions.state_delta["schema_meta_fallback"] is True

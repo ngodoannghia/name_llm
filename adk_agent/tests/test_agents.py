@@ -18,25 +18,29 @@ from ingest._skills_loader import load_single_skill
 from ingest._testing import FakeLlm
 from ingest.agents._header_agent import build_header_agent
 from ingest.agents._merge_agent import build_merge_agent
-from ingest.agents._schema_agent import build_schema_agent
-from ingest._models import HeaderProposal, MergeProposal, ShopSchema
+from ingest.agents._schema_meta_agent import build_schema_meta_agent
+from ingest.agents._schema_table_agent import build_schema_table_agent
+from ingest._models import HeaderProposal, MergeProposal, ShopMeta, TableSchema
 
 CONFIG = IngestConfig()
 SKILLS_DIR = Path(__file__).resolve().parent.parent / "skills"
 
 
 def test_agents_have_inline_skill_no_tools_and_schema() -> None:
-  """Ba agent đều single_turn, include_contents none, đúng output_schema.
+  """Bốn agent đều single_turn, include_contents none, đúng output_schema.
 
   Agent ingest không có tool nào: skill được inline vào instruction để
   model thật không thể rơi vào vòng lặp load_skill_resource (lỗi test
   luồng thật 2026-10-31: 64 lần load cùng file rồi vượt cửa sổ context).
+  Schema tách thành 2 agent: một bảng mỗi lần (TableSchema) và meta
+  cấp shop (ShopMeta), để không còn lần viết toàn bộ schema một lúc.
   """
   fake = FakeLlm()
   cases = [
       (build_header_agent(CONFIG, model=fake), "header_agent", HeaderProposal, "header_proposal", "datamate-header"),
       (build_merge_agent(CONFIG, model=fake), "merge_agent", MergeProposal, "merge_proposal", "datamate-merge"),
-      (build_schema_agent(CONFIG, model=fake), "schema_agent", ShopSchema, "schema_proposal", "datamate-schema"),
+      (build_schema_table_agent(CONFIG, model=fake), "schema_table_agent", TableSchema, "schema_table_proposal", "datamate-schema"),
+      (build_schema_meta_agent(CONFIG, model=fake), "schema_meta_agent", ShopMeta, "schema_meta", "datamate-schema"),
   ]
   for agent, name, schema, key, skill_name in cases:
     assert agent.name == name
@@ -49,11 +53,12 @@ def test_agents_have_inline_skill_no_tools_and_schema() -> None:
 
 
 def test_agent_instruction_names_its_skill() -> None:
-  """Instruction mỗi agent ghi rõ tên skill phải nạp đầu tiên."""
+  """Instruction mỗi agent ghi rõ tên skill đã inline."""
   fake = FakeLlm()
   assert "datamate-header" in build_header_agent(CONFIG, model=fake).instruction
   assert "datamate-merge" in build_merge_agent(CONFIG, model=fake).instruction
-  assert "datamate-schema" in build_schema_agent(CONFIG, model=fake).instruction
+  assert "datamate-schema" in build_schema_table_agent(CONFIG, model=fake).instruction
+  assert "datamate-schema" in build_schema_meta_agent(CONFIG, model=fake).instruction
 
 
 def test_agent_without_model_raises() -> None:
