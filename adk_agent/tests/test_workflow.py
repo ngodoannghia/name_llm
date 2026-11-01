@@ -127,6 +127,47 @@ async def test_workflow_header_loop_retry_then_ok(tmp_path: Path) -> None:
   assert state.get("header_attempts") == 1
 
 
+async def test_workflow_schema_table_truncated_json_then_ok(tmp_path: Path) -> None:
+  """JSON schema cụt lần 1 (vụ biz_127) không được crash shop.
+
+  Lần schema_table_agent đầu tiên trả JSON cụt qua canned: guard
+  after_model phải đổi nó thành sentinel để validator bác bằng Verdict
+  fail, route retry, lần 2 FakeLlm dispatch từ bản nháp trả schema đúng
+  và shop vẫn publish ok. Trước khi có guard, lần này raise
+  ValidationError tại node agent và giết cả workflow.
+  """
+  shop_dir = tmp_path / "data" / "biz_trunc"
+  _write_csv(
+      shop_dir / "don.csv",
+      [["Mã đơn hàng", "Tổng tiền"], ["DH1", "100000"]],
+  )
+  output_dir = tmp_path / "out"
+  truncated = '{\n  "table_id": "don",\n  "columns": [{"original_name": "Mã đơn hàng", '
+  fake = FakeLlm(canned=[truncated])
+  report, _state, events = await _run_workflow(shop_dir, output_dir, fake)
+  assert report["status"] == "ok"
+  assert report["table_count"] == 1
+  # Bằng chứng đã retry: agent chạy 2 lượt (lần 1 sentinel bị bác, lần 2
+  # dispatch từ bản nháp trả schema đúng), và có đúng một Verdict fail.
+  # (Bộ đếm schema_table_attempts bị reset về 0 khi sang bảng mới nên
+  # không dùng nó để khẳng định đã retry.)
+  agent_turns = [e for e in events if e.author == "schema_table_agent"]
+  assert len(agent_turns) == 2
+  # (Route node cũng mang output là bản dump Verdict nên đếm fail theo
+  # node validate, không đếm mọi event có status fail.)
+  fail_verdicts = [
+      e
+      for e in events
+      if isinstance(e.output, dict)
+      and e.output.get("status") == "fail"
+      and "validate_schema_table" in (getattr(e.node_info, "path", "") or "")
+  ]
+  assert len(fail_verdicts) == 1
+  assert all(event.error_code is None for event in events)
+  schema_path = Path(report["schema_path"])
+  assert schema_path.is_file()
+
+
 async def test_workflow_merge_repeated_error_fallback(tmp_path: Path) -> None:
   """Merge sai lặp lại 2 lần: fail sớm, fallback giữ riêng, vẫn publish ok."""
   shop_dir = tmp_path / "data" / "biz_two"

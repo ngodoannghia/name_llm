@@ -20,23 +20,38 @@ from .._config import IngestConfig
 from .._models import MergeProposal
 from ._common import build_single_turn_agent
 
-# Instruction của agent. Input hiện tại của node là JSON chuỗi tóm tắt
-# bảng từ merge_gate (table_id, chữ ký cột, số dòng); placeholder trong
-# instruction không cần thêm biến state nào khác.
+# Instruction của agent. Tóm tắt bảng được đọc qua placeholder
+# {merge_summary_text?} trong instruction (do merge_gate ghi vào state),
+# KHÔNG trông chờ vào tin nhắn đầu vào của node: ở lượt chạy đầu, tin
+# nhắn đó là tóm tắt, nhưng ở lượt thử lại, ADK đưa output của node
+# route (bản dump Verdict lỗi) làm tin nhắn đầu vào — vụ biz_127 cho
+# thấy model copy nguyên văn câu lỗi trong Verdict vào đáp án nếu
+# không được dặn rõ. Vì vậy instruction dặn riêng trường hợp thử lại
+# ở đoạn CHÚ Ý — LẦN THỬ LẠI dưới đây.
 _MERGE_INSTRUCTION = """Bạn là MergeAgent trong workflow ingest dữ liệu shop.
 
 Nội dung skill "datamate-merge" đã được đưa sẵn ở đầu instruction này
 (phần NỘI DUNG SKILL). Đọc kỹ và làm đúng theo đó. Agent này KHÔNG có
 tool nào — không gọi tool, chỉ suy luận rồi trả JSON ngay.
 
-Đầu vào của bạn là JSON chuỗi tóm tắt các bảng của shop (mỗi bảng có
-table_id, chữ ký cột đã chuẩn hóa và số dòng).
+Tóm tắt các bảng bạn cần quyết nằm ngay dưới đây (mỗi bảng có
+table_id, chữ ký cột đã chuẩn hóa và số dòng). Đây là nguồn đúng nhất,
+luôn ưu tiên hơn tin nhắn đầu vào:
+{merge_summary_text?}
 
 CHÚ Ý — đầu vào này CHỈ chứa các bảng chưa được code quyết. Các nhóm
 mà code đã khóa (cùng chữ ký cột chuẩn hóa thì code gộp luôn, xem
 skill) không nằm trong đầu vào và đã chốt: bạn KHÔNG quyết lại chúng,
-KHÔNG nhắc tới chúng trong đề xuất. Bạn chỉ quyết các bảng trong đầu
-vào, và chỉ các bảng đó.
+KHÔNG nhắc tới chúng trong đề xuất. Bạn chỉ quyết các bảng trong tóm
+tắt trên, và chỉ các bảng đó.
+
+CHÚ Ý — LẦN THỬ LẠI: nếu tin nhắn đầu vào của lượt này trông giống
+một bản Verdict lỗi (có trường reason mô tả lỗi của lần trước) thì đó
+chỉ là PHẢN HỒI để bạn sửa, không phải dữ liệu để copy: đọc reason để
+biết lần trước sai chỗ nào, sửa đúng chỗ đó theo tóm tắt trên, và
+TUYỆT ĐỐI không copy nội dung reason (ví dụ câu "không tồn tại trong
+dữ liệu quét") vào đề xuất. Đề xuất chỉ chứa table_id có trong tóm
+tắt trên, không chứa câu chữ nào từ bản Verdict.
 
 Nhiệm vụ: quyết định bảng nào gộp thành một bảng logic, bảng nào giữ riêng,
 dựa trên bằng chứng trong đầu vào:

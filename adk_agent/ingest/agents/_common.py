@@ -19,6 +19,7 @@ from google.genai import types
 from .._callbacks import (
     after_tool_callback,
     before_tool_callback,
+    make_after_model_json_guard,
     on_tool_error_callback,
 )
 from .._config import IngestConfig
@@ -91,10 +92,16 @@ def build_single_turn_agent(
   sẽ kiểm lại sau đó), và temperature 0 qua generate_content_config để
   kết quả tái lập được.
 
-  Lưu ý đã kiểm chứng từ source ADK: output_schema không tự sửa JSON
-  sai — JSON sai schema sẽ raise tại node agent và dừng workflow (không
-  đi qua loop retry của validator). Đây là giới hạn của khung lần này,
-  ghi rõ để lần sau xử lý bằng on_model_error hoặc tool kiểm tra trước.
+  Lưu ý đã kiểm chứng từ source ADK và từ vụ biz_127 ngày 2026-11-01:
+  output_schema không tự sửa JSON sai. JSON sai schema (bị cắt cụt,
+  thiếu field, sai kiểu) sẽ raise ValidationError ở bước
+  ``__maybe_save_output_to_state`` — bước này nằm ngoài khối try/except
+  của model generation nên ``on_model_error`` KHÔNG bắt được nó, và
+  exception sẽ giết cả workflow. Vì vậy mọi agent ingest đều gắn thêm
+  ``after_model`` guard (xem ``_callbacks.make_after_model_json_guard``):
+  response lỗi được thay bằng JSON sentinel hợp schema nhưng validator
+  sẽ bác, nên lỗi JSON trở thành một Verdict fail bình thường đi vào
+  retry/fallback thay vì crash shop.
 
   Args:
     name: Tên agent (duy nhất trong workflow).
@@ -160,4 +167,5 @@ def build_single_turn_agent(
       before_tool_callback=before_tool_callback,
       after_tool_callback=after_tool_callback,
       on_tool_error_callback=on_tool_error_callback,
+      after_model_callback=make_after_model_json_guard(output_schema),
   )

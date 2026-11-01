@@ -44,6 +44,15 @@ Quy tắc bắt buộc:
   source_sheets, sqlite_table, row_count, tên cột SQL, kiểu cột,
   sample_values, distinct_count, distinct_values, nullable_rate —
   không sửa các giá trị này, không bịa thêm mẫu hay cột.
+- sample_values: sao chép nguyên si từng chuỗi trong bản nháp (kể cả
+  dạng mảng JSON), KHÔNG tách chuỗi theo dấu phẩy, không thêm/xoá
+  phần tử. (Bài học từ biz_127: tách mảng mẫu theo dấu phẩy làm
+  validator bác vì mẫu bị xé nát, tốn lượt thử lại.)
+- LẦN THỬ LẠI: nếu tin nhắn đầu vào của lượt này trông giống một bản
+  Verdict lỗi (có trường reason) thì đó chỉ là PHẢN HỒI để bạn sửa,
+  không phải dữ liệu: đọc reason để sửa đúng chỗ, bản nháp trong
+  instruction vẫn là nguồn đúng nhất, và tuyệt đối không copy nội
+  dung reason vào schema.
 - Riêng date_range: bản nháp để {} nghĩa là chưa đo được — giữ nguyên
   {}, KHÔNG tự điền khoảng ngày từ dữ liệu mẫu (khoảng ngày tự điền
   có thể sai và làm lệch bước trả lời về sau, ví dụ bảng đơn hàng

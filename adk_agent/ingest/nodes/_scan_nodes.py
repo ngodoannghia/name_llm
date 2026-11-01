@@ -204,8 +204,12 @@ def header_gate(raw_tables: list[dict] | None = None) -> Event:
     raw_tables: Danh sách RawTable đã dump (lấy từ state).
 
   Returns:
-    Một Event duy nhất mang output là JSON chuỗi các bảng mơ hồ và route
-    "agent" (có bảng mơ hồ) hoặc "skip" (không có bảng mơ hồ).
+    Một Event duy nhất mang output là JSON chuỗi các bảng mơ hồ, state
+    (headers_final mặc định và header_summary_text là đúng chuỗi mơ hồ
+    đó để HeaderAgent đọc qua placeholder trong instruction — tin nhắn
+    đầu vào ở lượt thử lại là bản dump Verdict, không phải danh sách
+    mơ hồ, nên agent không được trông chờ vào tin nhắn đầu vào), và
+    route "agent" (có bảng mơ hồ) hoặc "skip" (không có bảng mơ hồ).
   """
   tables = raw_tables or []
   ambiguous = [table for table in tables if table.get("ambiguous")]
@@ -213,7 +217,10 @@ def header_gate(raw_tables: list[dict] | None = None) -> Event:
   route = "agent" if ambiguous else "skip"
   return Event(
       output=output,
-      state={"headers_final": _candidate_headers(tables)},
+      state={
+          "headers_final": _candidate_headers(tables),
+          "header_summary_text": output,
+      },
       route=route,
   )
 
@@ -310,9 +317,13 @@ def merge_gate(
 
   Returns:
     Một Event duy nhất mang output là JSON chuỗi tóm tắt các bảng chưa
-    khóa (id, chữ ký cột, số dòng), state (merge_groups mặc định và
-    merge_locked_groups để validator/fallback gộp tiếp), và route
-    "agent" (hơn 1 bảng chưa khóa) hoặc "skip".
+    khóa (id, chữ ký cột, số dòng), state (merge_groups mặc định,
+    merge_locked_groups để validator/fallback gộp tiếp, và
+    merge_summary_text là đúng chuỗi tóm tắt đó để MergeAgent đọc qua
+    placeholder trong instruction — xem lý do ở instruction của agent:
+    tin nhắn đầu vào ở lượt thử lại là bản dump Verdict, không phải
+    tóm tắt, nên agent không được trông chờ vào tin nhắn đầu vào),
+    và route "agent" (hơn 1 bảng chưa khóa) hoặc "skip".
   """
   tables = raw_tables or []
   locked = deterministic_merge_groups(tables, input_kind)
@@ -341,6 +352,7 @@ def merge_gate(
       state={
           "merge_groups": default_groups,
           "merge_locked_groups": locked,
+          "merge_summary_text": output,
       },
       route=route,
   )

@@ -39,6 +39,11 @@ Tóm tắt đó là:
 Nhiệm vụ: viết join_hints và notes cho toàn bộ shop.
 
 Quy tắc bắt buộc:
+- LẦN THỬ LẠI: nếu tin nhắn đầu vào của lượt này trông giống một bản
+  Verdict lỗi (có trường reason) thì đó chỉ là PHẢN HỒI để bạn sửa,
+  không phải dữ liệu: đọc reason để sửa đúng chỗ, tóm tắt trong
+  instruction vẫn là nguồn đúng nhất, và tuyệt đối không copy nội
+  dung reason vào join_hints hay notes.
 - join_hints chỉ ghi khi hai bảng có cột chung tên và vai trò khóa
   (ví dụ cùng mã đơn hàng, mã sản phẩm, mã khách hàng): mỗi hint ghi
   rõ bảng nguồn, cột nguồn, bảng đích, cột đích và evidence ngắn
