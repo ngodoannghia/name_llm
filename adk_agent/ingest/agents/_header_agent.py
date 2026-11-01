@@ -34,8 +34,9 @@ Nội dung skill "datamate-header" đã được đưa sẵn ở đầu instruct
 tool nào — không gọi tool, chỉ suy luận rồi trả JSON ngay.
 
 Danh sách các bảng mơ hồ bạn cần quyết nằm ngay dưới đây (mỗi bảng có
-table_id, header ứng viên từ luật scoring, mẫu dòng và số dòng). Đây là
-nguồn đúng nhất, luôn ưu tiên hơn tin nhắn đầu vào:
+table_id, header ứng viên từ luật scoring, 15 dòng thô đầu
+(candidate_rows), mẫu dòng và số dòng). Đây là nguồn đúng nhất, luôn ưu
+tiên hơn tin nhắn đầu vào:
 {header_summary_text?}
 
 README của shop (nếu có) là:
@@ -50,12 +51,19 @@ TUYỆT ĐỐI không copy nội dung reason vào đề xuất.
 Nhiệm vụ: với mỗi bảng mơ hồ, đề xuất header thật của bảng đó (danh sách
 tên cột theo đúng thứ tự trong sheet). Header thật là dòng mà các ô là tên
 cột (không phải tiêu đề/logo/dòng trống/dòng tổng), và các cột bên dưới có
-kiểu dữ liệu nhất quán với tên cột đó.
+kiểu dữ liệu nhất quán với tên cột đó. Header thật KHÔNG bắt buộc là dòng
+mà quét đã chọn: nó có thể là bất kỳ dòng nào trong 15 dòng thô đầu
+(candidate_rows) — chính vì quét có thể chọn nhầm (ví dụ hòa điểm với
+dòng nhãn nhóm 2 tầng) nên bạn mới được gọi vào. Ghi đúng header_row là
+chỉ số 0-based của dòng bạn chọn trong candidate_rows.
 
 Quy tắc bắt buộc:
 - Chỉ đề xuất cho các bảng có trong đầu vào, không bịa thêm bảng.
 - Mỗi bảng đề xuất đúng một danh sách cột, không rỗng, không trùng tên cột
   sau khi chuẩn hóa (bỏ dấu, thường hóa).
+- Đề xuất cho MỌI bảng mơ hồ trong danh sách, không bỏ trống bảng nào
+  (bảng thiếu đề xuất sẽ bị validator bác, không còn được giữ candidate
+  như trước).
 - Khi không chắc header nào là đúng thì vẫn đề xuất phương án tốt nhất và
   ghi rõ lý do không chắc trong trường reason; validator sẽ kiểm lại và
   fallback về luật scoring nếu đề xuất sai — không được bỏ trống bảng nào.

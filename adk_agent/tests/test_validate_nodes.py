@@ -20,6 +20,7 @@ from ingest._models import (
     MergeGroup,
 )
 from ingest.nodes._validate_nodes import (
+    _lot_base,
     make_route_header,
     make_route_merge,
     make_route_schema_meta,
@@ -72,6 +73,147 @@ def test_validate_header_ok() -> None:
   event = validate_header(proposal, RAW)
   assert event.output["status"] == "ok"
   assert event.actions.state_delta["headers_final"]["don"] == ["Mã đơn", "Tổng tiền"]
+
+
+def test_validate_header_accepts_header_from_another_row() -> None:
+  """validate_header đạt khi đề xuất khớp một dòng khác dòng quét chọn."""
+  raw = [
+      {
+          "table_id": "bang",
+          "header": ["Nhóm A", "cot_2", "Nhóm B", "cot_4"],
+          "header_row": 0,
+          "column_signature": "nhom_a|cot_2|nhom_b|cot_4",
+          "ambiguous": True,
+          "candidate_rows": [
+              ["Nhóm A", "", "Nhóm B", ""],
+              ["Mã đơn", "Tên hàng", "Số lượng", "Tổng tiền"],
+              ["DH1", "Coca", "2", "10000"],
+          ],
+      }
+  ]
+  proposal = HeaderProposal(
+      tables=[
+          TableHeader(
+              table_id="bang",
+              header_row=1,
+              columns=["Mã đơn", "Tên hàng", "Số lượng", "Tổng tiền"],
+          )
+      ],
+  )
+  event = validate_header(proposal, raw)
+  assert event.output["status"] == "ok"
+  assert event.actions.state_delta["headers_final"]["bang"] == [
+      "Mã đơn",
+      "Tên hàng",
+      "Số lượng",
+      "Tổng tiền",
+  ]
+  assert event.actions.state_delta["header_rows_final"]["bang"] == 1
+
+
+def test_validate_header_prefers_claimed_row_on_duplicate_rows() -> None:
+  """Hai dòng thô giống nhau thì dùng dòng agent khai."""
+  raw = [
+      {
+          "table_id": "bang",
+          "header": ["Mã đơn", "Tổng tiền"],
+          "header_row": 0,
+          "column_signature": "ma_don|tong_tien",
+          "ambiguous": True,
+          "candidate_rows": [
+              ["Mã đơn", "Tổng tiền"],
+              ["Mã đơn", "Tổng tiền"],
+              ["DH1", "10000"],
+          ],
+      }
+  ]
+  proposal = HeaderProposal(
+      tables=[
+          TableHeader(
+              table_id="bang", header_row=1, columns=["Mã đơn", "Tổng tiền"]
+          )
+      ],
+  )
+  event = validate_header(proposal, raw)
+  assert event.output["status"] == "ok"
+  assert event.actions.state_delta["header_rows_final"]["bang"] == 1
+
+
+def test_validate_header_rejects_proposal_matching_no_row() -> None:
+  """validate_header bác khi đề xuất không khớp dòng nào trong 15 dòng đầu."""
+  raw = [
+      {
+          "table_id": "bang",
+          "header": ["Mã đơn", "Tổng tiền"],
+          "header_row": 0,
+          "column_signature": "ma_don|tong_tien",
+          "ambiguous": True,
+          "candidate_rows": [
+              ["Mã đơn", "Tổng tiền"],
+              ["DH1", "10000"],
+          ],
+      }
+  ]
+  proposal = HeaderProposal(
+      tables=[
+          TableHeader(
+              table_id="bang", header_row=0, columns=["Mã đơn", "Tiền khác"]
+          )
+      ],
+  )
+  event = validate_header(proposal, raw)
+  assert event.output["status"] == "fail"
+
+
+def test_validate_merge_lot_variant_real_names_fail() -> None:
+  """validate_merge bác nhóm chứa cặp lô thật (tên gốc khác hậu tố lo)."""
+  assert _lot_base(
+      "DanhSachHoaDonChiTietLo.xlsx", "Sheet1"
+  ) == _lot_base("DanhSachHoaDonChiTiet.xlsx", "Sheet1")
+  assert _lot_base("pos.sqlite", "chi_tiet_don_lo") == _lot_base(
+      "pos.sqlite", "chi_tiet_don"
+  )
+  assert _lot_base("ChiTietLot.xlsx", "Sheet1") == _lot_base(
+      "ChiTiet.xlsx", "Sheet1"
+  )
+  raw = [
+      {
+          "table_id": "chitiet",
+          "source_file": "DanhSachHoaDonChiTiet.xlsx",
+          "source_sheet": "Sheet1",
+          "column_signature": "ma|so_luong|tien",
+      },
+      {
+          "table_id": "chitietlo",
+          "source_file": "DanhSachHoaDonChiTietLo.xlsx",
+          "source_sheet": "Sheet1",
+          "column_signature": "ma|so_luong|tien",
+      },
+  ]
+  proposal = MergeProposal(
+      groups=[
+          MergeGroup(tables=["chitiet", "chitietlo"], evidence="cùng chữ ký")
+      ],
+      singles=[],
+  )
+  event = validate_merge(proposal, raw)
+  assert event.output["status"] == "fail"
+
+
+def test_validate_header_missing_ambiguous_proposal_fail() -> None:
+  """Bảng mơ hồ thiếu đề xuất thì bị bác, không giữ candidate lặng lẽ."""
+  raw = [
+      {
+          "table_id": "bang",
+          "header": ["Mã đơn", "Tổng tiền"],
+          "header_row": 0,
+          "column_signature": "ma_don|tong_tien",
+          "ambiguous": True,
+          "candidate_rows": [["Mã đơn", "Tổng tiền"]],
+      }
+  ]
+  event = validate_header(HeaderProposal(tables=[]), raw)
+  assert event.output["status"] == "fail"
 
 
 def test_validate_header_wrong_columns_fail() -> None:
@@ -362,6 +504,93 @@ def test_validate_schema_meta_ok_and_bad_reference() -> None:
   )
   event = validate_schema_meta(bad, schema_table_results=results)
   assert event.output["status"] == "fail"
+
+
+def _results_with_roles() -> list[dict]:
+  """Kết quả bảng giả lập có role_hint để kiểm luật join."""
+  return [
+      {
+          "sqlite_table": "don",
+          "columns": [
+              {"sqlite_name": "ma", "role_hint": "order_id"},
+              {"sqlite_name": "tra_bang", "role_hint": "payment"},
+              {"sqlite_name": "ma_kh", "role_hint": "customer_id"},
+              {"sqlite_name": "idch", "role_hint": "unknown"},
+          ],
+      },
+      {
+          "sqlite_table": "thanhtoan",
+          "columns": [
+              {"sqlite_name": "ma", "role_hint": "order_id"},
+              {"sqlite_name": "httt", "role_hint": "payment"},
+          ],
+      },
+      {
+          "sqlite_table": "hang",
+          "columns": [
+              {"sqlite_name": "ma_hang", "role_hint": "product_id"},
+              {"sqlite_name": "idch", "role_hint": "unknown"},
+          ],
+      },
+  ]
+
+
+def _hint(from_table: str, from_column: str, to_table: str, to_column: str) -> dict:
+  """Một join_hint tối thiểu cho test."""
+  return {
+      "from_table": from_table,
+      "from_column": from_column,
+      "to_table": to_table,
+      "to_column": to_column,
+      "evidence": "test",
+  }
+
+
+def test_validate_schema_meta_rejects_payment_join() -> None:
+  """validate_schema_meta bác join nối theo phương thức thanh toán."""
+  meta = ShopMeta(
+      join_hints=[_hint("thanhtoan", "httt", "don", "tra_bang")], notes=[]
+  )
+  event = validate_schema_meta(meta, schema_table_results=_results_with_roles())
+  assert event.output["status"] == "fail"
+  assert "payment" in event.output["reason"]
+
+
+def test_validate_schema_meta_rejects_mismatched_key_roles() -> None:
+  """validate_schema_meta bác join nối hai vai trò khóa khác nhau."""
+  meta = ShopMeta(
+      join_hints=[_hint("don", "ma", "hang", "ma_hang")], notes=[]
+  )
+  event = validate_schema_meta(meta, schema_table_results=_results_with_roles())
+  assert event.output["status"] == "fail"
+
+
+def test_validate_schema_meta_accepts_same_key_or_unknown() -> None:
+  """Cùng role khóa hoặc một đầu unknown thì join được cho qua."""
+  meta = ShopMeta(
+      join_hints=[
+          _hint("thanhtoan", "ma", "don", "ma"),
+          _hint("don", "ma_kh", "hang", "idch"),
+      ],
+      notes=[],
+  )
+  event = validate_schema_meta(meta, schema_table_results=_results_with_roles())
+  assert event.output["status"] == "ok"
+
+
+def test_validate_schema_meta_unknown_unknown_passes_known_gap() -> None:
+  """Join unknown-unknown vẫn cho qua: giới hạn đã biết của luật role.
+
+  Luật role không có ground truth để biết cột unknown có phải khóa hay
+  không (ví dụ các join idcuahang vô nghĩa của biz_123), nên chỉ chặn
+  được chúng bằng đo ID-overlap thật từ DB ở lần nâng cấp sau. Test này
+  khóa hành vi hiện tại để lần nâng cấp đó không bị coi là hồi quy.
+  """
+  meta = ShopMeta(
+      join_hints=[_hint("don", "idch", "hang", "idch")], notes=[]
+  )
+  event = validate_schema_meta(meta, schema_table_results=_results_with_roles())
+  assert event.output["status"] == "ok"
 
 
 def test_mark_schema_meta_fallback() -> None:

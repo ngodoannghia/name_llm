@@ -270,6 +270,12 @@ class RawTable(BaseModel):
   header_row: int = Field(ge=-1, default=-1)
   """Chỉ số dòng header (0-based); -1 với bảng SQLite."""
 
+  sheet_year: int | None = None
+  """Năm suy từ tên sheet rồi tên file (ví dụ "Thang 01-2025" -> 2025);
+  None khi tên không chứa năm. Chỉ dùng cho ô ngày không ghi năm khi làm
+  sạch (theo rulebook §8: ngày không năm lấy năm của sheet chứa nó); ngày
+  đã có năm trong giá trị thì không bao giờ bị năm này ghi đè."""
+
   row_count: int = Field(ge=0, default=0)
   """Số dòng dữ liệu (không tính dòng header)."""
 
@@ -278,6 +284,14 @@ class RawTable(BaseModel):
 
   ambiguous: bool = False
   """True khi header chưa chắc chắn và cần HeaderAgent xem lại."""
+
+  candidate_rows: list[list[str]] = Field(default_factory=list)
+  """15 dòng thô đầu của bảng (dạng chuỗi, đã cắt ô trống thành "") để
+  validator header kiểm chứng đề xuất của agent: đề xuất đạt khi khớp
+  một dòng bất kỳ trong các dòng này, không bắt buộc khớp đúng dòng mà
+  quét đã chọn. Bảng SQLite chỉ có 1 dòng là tên cột. Cố tình cắt ở 15
+  dòng để state không phình (đủ bao phủ header sau tiêu đề + kỳ báo cáo
+  + dòng trống theo kinh nghiệm train, khớp giới hạn quét của phase1)."""
 
   column_signature: str = ""
   """Chữ ký cột: tên cột đã chuẩn hóa nối bằng dấu |, dùng để kiểm tra gộp."""
@@ -317,6 +331,15 @@ class ColumnManifest(BaseModel):
 
   semantic: str = ""
   """Ngữ nghĩa cột theo map_columns của phase1 (rỗng nếu không map được)."""
+
+  suspected_money: bool = False
+  """Cờ chẩn đoán (không phải quyết định format): True khi cột TEXT này
+  trông như cột tiền bị map sót — ít nhất 80% mẫu khác rỗng parse được
+  thành tiền VÀ mẫu chứa dấu bẩn (dấu phẩy, 'đ', 'k', 'tr'). Chỉ cảnh
+  báo để schema/QA biết, không tự format bừa khi ngữ nghĩa chưa chắc;
+  cột STT/số điện thoại không bị cờ oan vì mẫu của chúng không chứa
+  dấu bẩn (và tiền số thuần không dấu bẩn thì SQLite vẫn SUM đúng nên
+  không cần cờ)."""
 
 
 class TableManifest(BaseModel):

@@ -460,6 +460,8 @@ workflow (xem §2 nguyên tắc 4 và plan §2.4 mục 3).
 | `readme_text` | `init_shop` | SchemaAgent (qua instruction `{readme_text?}`) | Đã cắt 4000 ký tự ở node quét, không đưa cả file vào state |
 | `raw_tables` | `scan_sheets` / `scan_sqlite` | HeaderAgent, MergeAgent | List `RawTable` đã dump thành dict (JSON-safe) |
 | `headers_final` | `validate_header` (qua route `"ok"`) | MergeAgent, clean_tables | Dict bảng -> header chốt |
+| `header_rows_final` | `header_gate` (mặc định), `validate_header` (qua route `"ok"`), `mark_header_fallback` | clean_tables | Dict bảng -> dòng header chốt (0-based; -1 với SQLite); clean_tables đọc lại nguồn với đúng dòng này thay vì detect lại, vì detect lại sẽ vô hiệu hóa quyết định sửa dòng header của agent |
+| `candidate_rows` (trong từng RawTable của `raw_tables`) | `scan_sheets` / `scan_sqlite` | `validate_header` | 15 dòng thô đầu của bảng, để validator kiểm chứng đề xuất header khớp một dòng bất kỳ trong đó (không bắt buộc khớp dòng quét đã chọn) |
 | `merge_groups` | `merge_gate` (mặc định), `validate_merge` (qua route `"ok"`), `mark_merge_fallback` | clean_tables | Nhóm gộp chốt = nhóm khóa bởi code + phần agent đạt (hoặc nhóm khóa + giữ riêng khi fallback) |
 | `merge_locked_groups` | `merge_gate` | `validate_merge`, `mark_merge_fallback` | Nhóm khóa bởi code: các bảng không phải SQLite có cùng chữ ký cột chuẩn hóa (cùng bộ cột, không kể thứ tự); ngoại lệ không khóa: bảng SQLite, nhóm chứa cả bảng lẫn biến thể lô. MergeAgent không nhận và không được quyết lại các bảng này |
 | `clean_stats` | `clean_tables` | `validate_shop`, `finalize_shop` | `CleanStats` đã dump |

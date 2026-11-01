@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import random
+import re
 import sqlite3
 from pathlib import Path
 
@@ -29,7 +30,18 @@ import pandas as pd
 
 from ._config import SAMPLE_CELL_MAX_CHARS, SAMPLE_SEED
 from ._models import RawTable
-from ._phase1 import detect_header_row, normalize_key
+from ._phase1 import detect_header_row, header_score, normalize_key
+
+# Ngưỡng "sát điểm" cho cờ ambiguous: một ô chữ tương đương 10 điểm
+# trong _header_score, nên hai dòng đầu bảng lệch nhau không quá một ô
+# chữ thì lựa chọn của quét là không vững — phải để HeaderAgent xem lại
+# thay vì tin hẳn dòng điểm cao nhất (hòa điểm thì quét lấy dòng sớm
+# nhất, mà dòng sớm nhất có thể là dòng nhãn nhóm 2 tầng). Chỉ xét các
+# dòng có từ 2 ô không trống trở lên: dòng một ô luôn bị trừ nặng về
+# -49 theo luật tiêu đề của _header_score nên mọi dòng một ô đều hòa
+# điểm với nhau — đó là di chứng của luật trừ, không phải tín hiệu mơ
+# hồ thật (bảng một cột như danh sách khách hàng sẽ bị gắn cờ oan).
+HEADER_CLOSE_GAP = 10.0
 
 # Các đuôi file được coi là dữ liệu (README và file lạ bị bỏ qua).
 DATA_SUFFIXES = {".csv", ".xlsx", ".xls", ".sqlite", ".db"}
@@ -162,6 +174,33 @@ def _dedupe_columns(columns: list[str]) -> list[str]:
   return result
 
 
+def _extract_sheet_year(source_sheet: str, source_file: str) -> int | None:
+  """Trích năm của bảng từ tên sheet rồi tên file.
+
+  Rulebook §8 quy định ngày không ghi năm lấy năm của sheet chứa nó, nên
+  năm phải được mang theo từ lúc đọc (về sau chỉ còn DataFrame thì
+  không biết dòng nào thuộc sheet nào, nhất là sau khi gộp nhiều sheet
+  tháng thành một bảng). Quy tắc chọn khi tên chứa nhiều năm: lấy năm
+  4 chữ số đầu tiên (dạng 19xx hoặc 20xx) trong tên sheet; nếu tên sheet
+  không có năm thì lấy năm đầu tiên trong tên file (không tính đuôi);
+  không có năm ở đâu thì trả None (ngày không năm khi đó vẫn thành NULL,
+  không đoán năm).
+
+  Args:
+    source_sheet: Tên sheet nguồn (rỗng với CSV/SQLite).
+    source_file: Tên file nguồn (kèm đuôi).
+
+  Returns:
+    Năm dạng int, hoặc None khi không trích được năm nào.
+  """
+  year_pattern = re.compile(r"(?:19|20)\d{2}")
+  for name in (source_sheet, Path(source_file).stem):
+    match = year_pattern.search(name or "")
+    if match:
+      return int(match.group(0))
+  return None
+
+
 def _sample_rows(
     rows: list[list[str]], first: int, random_count: int, seed: int
 ) -> list[list[str]]:
@@ -251,6 +290,7 @@ def _table_from_rows(
     first: int,
     random_count: int,
     seed: int,
+    table_id: str | None = None,
 ) -> tuple[RawTable, pd.DataFrame]:
   """Tách một bảng từ các dòng thô: detect header, tạo DataFrame, lấy mẫu.
 
@@ -264,6 +304,8 @@ def _table_from_rows(
     first: Số dòng mẫu đầu lấy.
     random_count: Số dòng mẫu ngẫu nhiên lấy thêm.
     seed: Seed cho mẫu ngẫu nhiên.
+    table_id: Id bảng đã tính trước (khi tầng gọi đã cần id trước lúc
+      detect để tra header_row chốt); None thì tự tạo id ở đây.
 
   Returns:
     Tuple (RawTable metadata, DataFrame dữ liệu với header đã chốt).
@@ -289,17 +331,41 @@ def _table_from_rows(
     # cột thừa; cắt về đúng số cột header để DataFrame khớp metadata.
     frame = frame.iloc[:, : len(header)]
     frame.columns = header
-  table_id = _make_table_id(source_file, source_sheet, taken)
+  if table_id is None:
+    table_id = _make_table_id(source_file, source_sheet, taken)
   # Bảng mơ hồ khi header không ở dòng 0, hoặc header gốc có ô trống,
-  # hoặc có tên cột trùng nhau: cả ba đều là dấu hiệu header chưa chắc
-  # và cần HeaderAgent xem lại (bảng SQLite không qua detect nên không mơ hồ).
+  # hoặc có tên cột trùng nhau, hoặc hai dòng đầu bảng sát điểm nhau:
+  # cả bốn đều là dấu hiệu header chưa chắc và cần HeaderAgent xem lại
+  # (bảng SQLite không qua detect nên không mơ hồ). Riêng trường hợp
+  # sát điểm: detect lấy dòng sớm nhất khi hòa điểm, mà dòng sớm nhất
+  # có thể là dòng nhãn nhóm 2 tầng — không có cách nào biết chắc nếu
+  # không cho agent xem, nên cứ bật cờ khi khoảng cách top-1/top-2
+  # không quá một ô chữ (xem HEADER_CLOSE_GAP).
   ambiguous = False
   if detected >= 0:
     original_cells = ["" if cell is None else str(cell).strip() for cell in (rows[detected] if detected < len(rows) else [])]
+    scores = sorted(
+        (
+            header_score(row)
+            for row in rows[:15]
+            if sum(
+                1
+                for cell in row
+                if cell is not None
+                and (not isinstance(cell, str) or cell.strip())
+            )
+            >= 2
+        ),
+        reverse=True,
+    )
+    close_call = (
+        len(scores) >= 2 and scores[0] - scores[1] <= HEADER_CLOSE_GAP
+    )
     ambiguous = (
         detected != 0
         or any(not cell for cell in original_cells)
         or len(set(raw_header)) != len(raw_header)
+        or close_call
     )
   metadata = RawTable(
       table_id=table_id,
@@ -307,10 +373,12 @@ def _table_from_rows(
       source_sheet=source_sheet,
       header=header,
       header_row=detected,
+      sheet_year=_extract_sheet_year(source_sheet, source_file),
       row_count=len(frame),
       sample_rows=_sample_rows(data_rows, first, random_count, seed),
       ambiguous=ambiguous,
       column_signature=column_signature(header),
+      candidate_rows=str_rows[:15],
   )
   return metadata, frame
 
@@ -402,6 +470,7 @@ async def read_source_tables(
     seed: int,
     only_sqlite: bool = False,
     only_sheets: bool = False,
+    header_row_overrides: dict[str, int] | None = None,
 ) -> list[tuple[RawTable, pd.DataFrame]]:
   """Đọc toàn bộ bảng nguồn của shop (metadata + DataFrame).
 
@@ -416,6 +485,12 @@ async def read_source_tables(
     seed: Seed cho mẫu ngẫu nhiên.
     only_sqlite: True thì chỉ đọc file SQLite.
     only_sheets: True thì chỉ đọc file CSV/XLSX.
+    header_row_overrides: Dòng header chốt theo table_id (do loop header
+      ghi vào state header_rows_final) — node quét gọi không kèm
+      (detect lại từ đầu), node làm sạch gọi kèm để dùng đúng dòng mà
+      agent đã chốt thay vì detect lại và vô hiệu hóa quyết định của
+      agent. Override ngoài khoảng dòng hoặc bằng -1 ở nhánh sheet thì
+      bị bỏ qua và detect lại như thường (phòng state cũ/lạ).
 
   Returns:
     Danh sách tuple (RawTable, DataFrame) theo thứ tự file/sheet đã sắp xếp.
@@ -428,7 +503,31 @@ async def read_source_tables(
       seed,
       only_sqlite,
       only_sheets,
+      header_row_overrides,
   )
+
+
+def _resolve_header_row(
+    table_id: str,
+    rows: list[list[object]],
+    header_row_overrides: dict[str, int] | None,
+) -> int:
+  """Chọn dòng header cho một bảng sheet: override chốt trước, detect sau.
+
+  Args:
+    table_id: Id bảng (đã tính trước để tra override).
+    rows: Toàn bộ dòng thô của bảng.
+    header_row_overrides: Dòng header chốt theo table_id (có thể None).
+
+  Returns:
+    Chỉ số dòng header (0-based); override hợp lệ thì dùng nó, ngược
+    lại detect bằng luật scoring của phase1.
+  """
+  if header_row_overrides is not None:
+    override = header_row_overrides.get(table_id)
+    if override is not None and 0 <= override < len(rows):
+      return override
+  return detect_header_row(rows)
 
 
 def _read_source_tables_sync(
@@ -438,6 +537,7 @@ def _read_source_tables_sync(
     seed: int,
     only_sqlite: bool,
     only_sheets: bool,
+    header_row_overrides: dict[str, int] | None = None,
 ) -> list[tuple[RawTable, pd.DataFrame]]:
   """Phần đồng bộ của :func:`read_source_tables` (chạy trong thread riêng).
 
@@ -448,6 +548,9 @@ def _read_source_tables_sync(
     seed: Seed cho mẫu ngẫu nhiên.
     only_sqlite: Chỉ đọc file SQLite.
     only_sheets: Chỉ đọc file CSV/XLSX.
+    header_row_overrides: Dòng header chốt theo table_id (xem
+      :func:`read_source_tables`); nhánh SQLite không dùng override vì
+      tên cột lấy thẳng từ schema DB.
 
   Returns:
     Danh sách tuple (RawTable, DataFrame).
@@ -458,7 +561,10 @@ def _read_source_tables_sync(
     suffix = path.suffix.lower()
     if suffix == ".csv" and not only_sqlite:
       rows = _read_csv_rows(path)
-      detected = detect_header_row(rows)
+      # Id phải tính trước để tra override: _make_table_id đã ghi id
+      # vào taken nên _table_from_rows nhận sẵn id, không tính lại.
+      table_id = _make_table_id(path.name, "", taken)
+      detected = _resolve_header_row(table_id, rows, header_row_overrides)
       results.append(
           _table_from_rows(
               source_file=path.name,
@@ -469,13 +575,15 @@ def _read_source_tables_sync(
               first=first,
               random_count=random_count,
               seed=seed,
+              table_id=table_id,
           )
       )
     elif suffix in (".xlsx", ".xls") and not only_sqlite:
       sheets = _read_xlsx_sheets(path)
       for sheet_name in sorted(sheets):
         rows = sheets[sheet_name]
-        detected = detect_header_row(rows)
+        table_id = _make_table_id(path.name, sheet_name, taken)
+        detected = _resolve_header_row(table_id, rows, header_row_overrides)
         results.append(
             _table_from_rows(
                 source_file=path.name,
@@ -486,6 +594,7 @@ def _read_source_tables_sync(
                 first=first,
                 random_count=random_count,
                 seed=seed,
+                table_id=table_id,
             )
         )
     elif suffix in (".sqlite", ".db") and not only_sheets:

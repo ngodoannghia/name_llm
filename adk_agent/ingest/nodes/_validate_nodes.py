@@ -20,7 +20,9 @@ Module này thuộc tầng kiểm chứng. Nguyên tắc xuyên suốt (xem plan
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
+from pathlib import Path
 
 from google.adk import Event
 
@@ -28,12 +30,14 @@ from .._config import IngestConfig
 from .._models import (
     HeaderProposal,
     MergeProposal,
+    TableHeader,
     RawTable,
     ShopMeta,
     TableSchema,
     Verdict,
 )
 from .._phase1 import normalize_key
+from .._readers import _clean_header_cell, _dedupe_columns
 
 
 def _normalized(columns: list[str]) -> list[str]:
@@ -73,18 +77,105 @@ def _verdict_event(
   return Event(output=verdict.model_dump(), state=state or {})
 
 
+def _header_row_plausible(
+    row: list[str], candidate_rows: list[list[str]], index: int
+) -> bool:
+  """Kiểm tra một dòng ứng viên có dáng của dòng header không.
+
+  Đây là lưới chắn thô, không phải chứng minh "đây chính là header":
+  validator chỉ chặn được dòng trống, dòng toàn số (dòng dữ liệu/dòng
+  tổng), và trường hợp dưới dòng đó không còn dữ liệu nào trong cửa sổ
+  15 dòng (đề xuất trỏ xuống cuối bảng trống). Việc chọn đúng dòng nào
+  trong các dòng có dáng header vẫn là phán đoán của agent — giống như
+  trước đây việc tin dòng quét cũng là phán đoán của luật scoring.
+
+  Args:
+    row: Dòng ứng viên (dạng chuỗi).
+    candidate_rows: 15 dòng thô đầu của bảng.
+    index: Vị trí của dòng ứng viên trong candidate_rows.
+
+  Returns:
+    True khi dòng có ít nhất một ô chứa chữ cái và (nếu còn dòng dưới
+    trong cửa sổ) ít nhất một dòng dưới có ô không trống.
+  """
+  if not any(ch.isalpha() for cell in row for ch in cell):
+    return False
+  below = candidate_rows[index + 1 :]
+  if below and not any(cell.strip() for below_row in below for cell in below_row):
+    return False
+  return True
+
+
+def _matched_candidate_row(item: TableHeader, table: dict) -> int | None:
+  """Tìm dòng thô mà đề xuất header của agent khớp vào.
+
+  Đề xuất đạt khi tên cột chuẩn hóa của nó khớp đúng một dòng bất kỳ
+  trong 15 dòng thô đầu của bảng (sau khi làm sạch ô trống thành cot_N
+  và khử trùng tên như lúc quét), không bắt buộc khớp đúng dòng mà
+  quét đã chọn — chính điểm này sửa vòng lặp header no-op cũ (validator
+  cũ bắt agent nhắc lại đúng candidate nên scan sai không ai sửa được).
+  Dòng agent khai trong header_row được ưu tiên nếu dòng đó khớp, còn
+  không thì lấy dòng khớp đầu tiên; node làm sạch dùng dòng khớp này
+  (qua header_rows_final), không dùng dòng agent khai, vì cột mới là
+  bằng chứng còn số dòng khai có thể nhầm.
+
+  Args:
+    item: Đề xuất header cho một bảng.
+    table: RawTable đã dump của bảng đó.
+
+  Returns:
+    Chỉ số dòng khớp (0-based; -1 với bảng SQLite), hoặc None khi
+    không dòng nào khớp hoặc dòng khớp không có dáng header. Bảng quét
+    từ trước khi có candidate_rows (không có dòng thô trong state) thì
+    quay về luật cũ: chỉ khớp khi bằng đúng header ứng viên.
+  """
+  normalized_proposed = _normalized(item.columns)
+  if table.get("header_row", -1) < 0:
+    # Bảng SQLite: dòng duy nhất là tên cột từ schema DB.
+    if normalized_proposed == _normalized(table.get("header", [])):
+      return -1
+    return None
+  candidate_rows = table.get("candidate_rows") or []
+  if not candidate_rows:
+    # State cũ không có dòng thô: giữ luật cũ để không bác oan đề xuất
+    # đúng candidate của các bảng quét trước bản này.
+    if normalized_proposed == _normalized(table.get("header", [])):
+      return table.get("header_row", 0)
+    return None
+  order: list[int] = []
+  if 0 <= item.header_row < len(candidate_rows):
+    order.append(item.header_row)
+  order.extend(index for index in range(len(candidate_rows)) if index not in order)
+  for index in order:
+    row = candidate_rows[index]
+    cleaned = _dedupe_columns(
+        [_clean_header_cell(cell, i) for i, cell in enumerate(row)]
+    )
+    if _normalized(cleaned) != normalized_proposed:
+      continue
+    if not _header_row_plausible(row, candidate_rows, index):
+      continue
+    return index
+  return None
+
+
 def validate_header(
     node_input: HeaderProposal,
     raw_tables: list[dict] | None = None,
 ) -> Event:
   """Kiểm chứng đề xuất header của HeaderAgent.
 
-  Quy tắc kiểm chứng của khung lần này (ghi rõ để lần sau nâng cấp):
-  đề xuất chỉ đạt khi tên cột chuẩn hóa của nó khớp đúng header ứng viên
-  từ quét (do validator chưa có dòng thô để kiểm chứng header ở dòng
-  khác). Đây là quy tắc an toàn nhưng chặt: agent đề xuất header khác
-  dòng quét sẽ bị bác và fallback về luật scoring. Lần sau nâng cấp
-  validator để kiểm chứng header ở bất kỳ dòng nào trong 15 dòng đầu.
+  Quy tắc kiểm chứng (sửa vòng lặp header no-op cũ):
+  - Đề xuất đạt khi tên cột chuẩn hóa khớp một dòng bất kỳ trong 15
+    dòng thô đầu của bảng (xem _matched_candidate_row) và dòng đó có
+    dáng header; không bắt buộc khớp đúng dòng quét đã chọn.
+  - Bảng mơ hồ mà agent không đề xuất thì bị bác (không còn giữ
+    candidate như trước): giữ candidate lặng lẽ chính là lý do sentinel
+    header cũ {"tables": []} lọt qua validator với "ok" giả, mất lượt
+    retry và ghi log sai. Bảng không mơ hồ mà không nằm trong đề xuất
+    thì vẫn giữ header ứng viên (agent chỉ cần quyết bảng mơ hồ).
+  - State ghi thêm header_rows_final (dòng header chốt theo bảng) để
+    node làm sạch dùng đúng dòng agent đã chốt thay vì detect lại.
 
   Args:
     node_input: Đề xuất header (đã coerce thành HeaderProposal từ output
@@ -92,12 +183,13 @@ def validate_header(
     raw_tables: Danh sách RawTable đã dump (lấy từ state).
 
   Returns:
-    Một Event duy nhất mang Verdict và state (headers_final khi đạt;
-    nhánh fail không ghi last_error — route node tự ghi, xem docstring
-    của _verdict_event).
+    Một Event duy nhất mang Verdict và state (headers_final và
+    header_rows_final khi đạt; nhánh fail không ghi last_error — route
+    node tự ghi, xem docstring của _verdict_event).
   """
   tables = {table["table_id"]: table for table in (raw_tables or [])}
   proposed: dict[str, list[str]] = {}
+  proposed_rows: dict[str, int] = {}
   for item in node_input.tables:
     if item.table_id not in tables:
       return _verdict_event(
@@ -124,32 +216,61 @@ def validate_header(
           ),
           state={},
       )
-    candidate = _normalized(tables[item.table_id]["header"])
-    if normalized != candidate:
+    matched = _matched_candidate_row(item, tables[item.table_id])
+    if matched is None:
       return _verdict_event(
           Verdict(
               status="fail",
               reason=(
-                  f"Bảng {item.table_id} đề xuất header không khớp header "
-                  f"ứng viên từ quét (ứng viên: {tables[item.table_id]['header']})."
+                  f"Bảng {item.table_id} đề xuất header không khớp dòng nào "
+                  "trong 15 dòng đầu của bảng thô."
               ),
           ),
           state={},
       )
     proposed[item.table_id] = item.columns
-  # Các bảng mơ hồ không nằm trong đề xuất thì giữ header ứng viên:
-  # thiếu đề xuất không phải lỗi, vì agent chỉ cần đề xuất cho bảng nó
-  # muốn sửa; bảng còn lại đã có header ứng viên tin cậy từ quét.
+    proposed_rows[item.table_id] = matched
+  # Bảng mơ hồ thiếu đề xuất thì bác: "thiếu đề xuất không phải lỗi"
+  # là luật cũ đã làm sentinel header rỗng lọt qua với "ok" giả (mất
+  # lượt retry, log ghi ok trong khi agent chưa chốt gì). Bảng không
+  # mơ hồ thì không cần đề xuất nên không bị luật này chạm tới.
+  for table_id, table in tables.items():
+    if table.get("ambiguous") and table_id not in proposed:
+      return _verdict_event(
+          Verdict(
+              status="fail",
+              reason=(
+                  f"Bảng {table_id} mơ hồ nhưng không có đề xuất header."
+              ),
+          ),
+          state={},
+      )
+  # Các bảng không nằm trong đề xuất thì giữ header ứng viên và dòng
+  # quét đã chọn.
   final = {table_id: table["header"] for table_id, table in tables.items()}
   final.update(proposed)
+  final_rows = {
+      table_id: table.get("header_row", -1) for table_id, table in tables.items()
+  }
+  final_rows.update(proposed_rows)
   return _verdict_event(
       Verdict(status="ok", reason="Header đề xuất khớp dữ liệu quét."),
-      state={"headers_final": final, "last_error": ""},
+      state={
+          "headers_final": final,
+          "header_rows_final": final_rows,
+          "last_error": "",
+      },
   )
 
 
 def _lot_variant_name(table_id: str) -> str:
   """Bỏ hậu tố lô khỏi id bảng để phát hiện cặp ChiTiet/ChiTietLo.
+
+  Đây chỉ là đường dự phòng khi không có tên file/sheet gốc (ví dụ
+  fixture test tối thiểu): với cặp lô thật của train, hậu tố "lo" nằm
+  GIỮA id (trước "_sheet1") nên hàm này mù — đường chính phải là
+  _lot_base_for_table dùng tên gốc (xem dưới). Hàm này được giữ để
+  fixture không có tên gốc vẫn giữ được luật cấm cũ.
 
   Args:
     table_id: Id bảng đã chuẩn hóa.
@@ -162,6 +283,79 @@ def _lot_variant_name(table_id: str) -> str:
   if table_id.endswith("lo"):
     return table_id[: -len("lo")]
   return table_id
+
+
+# Hậu tố lô nhận diện, xếp dài trước ngắn sau để "chitiet_lot" bị trừ
+# "_lot" (thành "chitiet") chứ không bị trừ "lot" (thành "chitiet_" rồi
+# mới cắt gạch dưới — kết quả cuối giống nhau nhưng trừ dài trước rõ
+# ràng hơn và tránh trường hợp biên như "lo_hang" bị trừ "hang" lẻ).
+# Danh sách này chỉ gồm cách gọi lô chung, không gắn với shop nào.
+_LOT_SUFFIXES = ("_lo_hang", "lo_hang", "theo_lo", "_lot", "lot", "_lo", "lo")
+
+
+def _strip_lot_suffix(normalized: str) -> str:
+  """Bỏ một hậu tố lô ở cuối tên đã chuẩn hóa (nếu có).
+
+  Args:
+    normalized: Tên đã chuẩn hóa (thường, không dấu, chỉ còn chữ/số
+      và gạch dưới).
+
+  Returns:
+    Tên sau khi bỏ hậu tố; tên gốc nếu không có hậu tố nào hoặc nếu bỏ
+    xong thành rỗng (tránh base rỗng làm mọi bảng đều "trùng" nhau).
+  """
+  for marker in _LOT_SUFFIXES:
+    if normalized.endswith(marker):
+      stripped = normalized[: -len(marker)].rstrip("_")
+      return stripped if stripped else normalized
+  return normalized
+
+
+def _lot_base(source_file: str, source_sheet: str) -> str:
+  """Tính "gốc lô" của một bảng từ tên file/sheet GỐC.
+
+  Vì sao phải dùng tên gốc thay vì table_id: table_id là tên file +
+  tên sheet đã sanitize và ghép lại, nên hậu tố lô của file (ví dụ
+  "ChiTietLo") nằm giữa id ("danhsachhoadonchitietlo_sheet1") và hàm
+  trừ hậu tố cuối id không bao giờ thấy nó — đó là lý do guard lô cũ
+  chưa từng kích hoạt trên train. Tính trên tên gốc thì ranh giới
+  file/sheet còn nguyên: trừ hậu tố lô ở cuối tên file và cuối tên
+  sheet rồi ghép lại, hai bảng chỉ khác nhau ở hậu tố lô sẽ có cùng
+  gốc.
+
+  Args:
+    source_file: Tên file nguồn (kèm đuôi).
+    source_sheet: Tên sheet nguồn (rỗng với CSV/SQLite).
+
+  Returns:
+    Chuỗi gốc lô để so sánh (hai bảng cùng gốc thì nghi là cặp
+    chi tiết/biến thể lô của nhau).
+  """
+  stem = re.sub(r"[^a-z0-9]+", "_", normalize_key(Path(source_file).stem)).strip("_")
+  stem_base = _strip_lot_suffix(stem)
+  if not source_sheet:
+    return stem_base
+  sheet = re.sub(r"[^a-z0-9]+", "_", normalize_key(source_sheet)).strip("_")
+  sheet_base = _strip_lot_suffix(sheet)
+  return f"{stem_base}_{sheet_base}" if sheet_base else stem_base
+
+
+def _lot_base_for_table(table: dict) -> str:
+  """Tính gốc lô cho một bảng trong dữ liệu quét.
+
+  Args:
+    table: RawTable đã dump (có source_file/source_sheet trong luồng
+      thật; fixture tối thiểu có thể không có).
+
+  Returns:
+    Gốc lô từ tên gốc khi có tên gốc, ngược lại gốc từ table_id
+    (đường dự phòng _lot_variant_name).
+  """
+  if table.get("source_file") or table.get("source_sheet"):
+    return _lot_base(
+        table.get("source_file", ""), table.get("source_sheet", "")
+    )
+  return _lot_variant_name(table.get("table_id", ""))
 
 
 def validate_merge(
@@ -188,7 +382,10 @@ def validate_merge(
   - Nhóm chứa đồng thời một bảng và biến thể lô của nó (ChiTiet +
     ChiTietLo) thì bị bác: gộp hai biến thể này sẽ đếm trùng dòng chi
     tiết, phải so sánh toàn bộ schema trước khi gộp (khung lần này chưa
-    có bước so sánh đó nên mặc định không gộp).
+    có bước so sánh đó nên mặc định không gộp). Phát hiện biến thể lô
+    dựa trên tên file/sheet GỐC (xem _lot_base_for_table), không dựa
+    trên đuôi table_id — vì hậu tố lô của file nằm giữa id nên trừ
+    đuôi id sẽ mù trước cặp lô thật.
 
   Args:
     node_input: Đề xuất gộp (đã coerce thành MergeProposal).
@@ -254,7 +451,7 @@ def validate_merge(
             ),
             state={},
         )
-      bases = {_lot_variant_name(table_id) for table_id in group.tables}
+      bases = {_lot_base_for_table(tables[table_id]) for table_id in group.tables}
       if len(bases) != len(group.tables):
         return _verdict_event(
             Verdict(
@@ -553,17 +750,46 @@ def make_route_schema_table(config: IngestConfig) -> Callable:
   return route_schema_table
 
 
+# Vai trò cột không bao giờ là khóa join: nối theo phương thức thanh
+# toán, trạng thái, tiền hay số lượng sẽ fan-out nhiều-nhiều (một đơn
+# tiền mặt nối với mọi thanh toán tiền mặt khác) chứ không nối đúng
+# thực thể. Join trên các role này bị bác dù tham chiếu có tồn tại.
+_NON_KEY_JOIN_ROLES = {"payment", "status", "money", "quantity"}
+# Vai trò khóa join: hai đầu join phải cùng một vai trò khóa, hoặc ít
+# nhất một đầu chưa biết vai trò (unknown) thì mới cho qua.
+_KEY_JOIN_ROLES = {"order_id", "product_id", "customer_id"}
+
+
 def validate_schema_meta(
     node_input: ShopMeta,
     schema_table_results: list[dict] | None = None,
 ) -> Event:
   """Kiểm chứng join_hints và notes do SchemaMetaAgent viết.
 
-  Chỉ kiểm tra tính tham chiếu: mỗi join_hint phải trỏ tới bảng và
-  cột có thật trong kết quả từng bảng (bảng/cột đã chốt ở vòng lặp
-  trước). Notes là văn bản tự do nên không kiểm nội dung. Join sai
-  tham chiếu sẽ sinh SQL lỗi ở bước trả lời nên phải bác để agent
+  Hai lớp kiểm chứng (lớp tham chiếu cũ là chưa đủ — join sai nhưng
+  trỏ tới cột có thật vẫn lọt qua và đã lọt vào schema thật, ví dụ
+  thanh_toan.httt -> don_hang.tra_bang nối theo phương thức thanh toán):
+  1. Tính tham chiếu: mỗi join_hint phải trỏ tới bảng và cột có thật
+     trong kết quả từng bảng (bảng/cột đã chốt ở vòng lặp trước).
+  2. Tương thích vai trò, theo đúng thứ tự sau:
+     - Bác khi một đầu có role thuộc nhóm không phải khóa
+       (payment/status/money/quantity): join trên các cột này không nối
+       thực thể mà fan-out nhiều-nhiều.
+     - Bác khi cả hai đầu đều có role khóa đã biết mà khác nhau (ví dụ
+       mã khách nối mã hàng): hai thực thể khác nhau không thể join.
+     - Cho qua khi ít nhất một đầu unknown, hoặc hai đầu cùng role
+       khóa (ví dụ cùng order_id).
+  Notes là văn bản tự do nên không kiểm nội dung. Join sai tham chiếu
+  hoặc sai vai trò sẽ sinh SQL sai ở bước trả lời nên phải bác để agent
   viết lại; hết lượt thì fallback về rỗng (xem mark_schema_meta_fallback).
+
+  Giới hạn đã biết của luật này (ghi rõ để không ngộ nhận): join mà cả
+  hai đầu đều unknown vẫn cho qua — ví dụ các join idcuahang vô nghĩa
+  của biz_123 (cả hai đầu đều unknown) không bị luật này chặn, vì
+  validator không có ground truth nào để biết idcuahang có phải khóa
+  hay không. Chặn được chúng cần đo ID-overlap thật từ DB (mục nâng
+  cấp ở FULL_PLAN §5 mục 10), không phải luật role. Trước mắt: QA
+  không được tin join_hints mù, nhất là join unknown-unknown.
 
   Args:
     node_input: Phần meta đề xuất (đã coerce thành ShopMeta).
@@ -574,10 +800,14 @@ def validate_schema_meta(
     nhánh fail không ghi last_error — route node tự ghi).
   """
   tables: dict[str, set[str]] = {}
+  roles: dict[tuple[str, str], str] = {}
   for table in schema_table_results or []:
-    tables[table.get("sqlite_table", "")] = {
-        col.get("sqlite_name", "") for col in table.get("columns", [])
-    }
+    table_name = table.get("sqlite_table", "")
+    tables[table_name] = set()
+    for col in table.get("columns", []):
+      col_name = col.get("sqlite_name", "")
+      tables[table_name].add(col_name)
+      roles[(table_name, col_name)] = col.get("role_hint", "unknown")
   for hint in node_input.join_hints:
     for table_name, col_name, role in (
         (hint.from_table, hint.from_column, "nguồn"),
@@ -602,8 +832,43 @@ def validate_schema_meta(
             ),
             state={},
         )
+    from_role = roles.get((hint.from_table, hint.from_column), "unknown")
+    to_role = roles.get((hint.to_table, hint.to_column), "unknown")
+    for role in (from_role, to_role):
+      if role in _NON_KEY_JOIN_ROLES:
+        return _verdict_event(
+            Verdict(
+                status="fail",
+                reason=(
+                    f"Join_hint {hint.from_table}.{hint.from_column} -> "
+                    f"{hint.to_table}.{hint.to_column} nối theo cột vai trò "
+                    f"{role}, không phải khóa thực thể nên sẽ fan-out "
+                    "nhiều-nhiều."
+                ),
+            ),
+            state={},
+        )
+    if (
+        from_role in _KEY_JOIN_ROLES
+        and to_role in _KEY_JOIN_ROLES
+        and from_role != to_role
+    ):
+      return _verdict_event(
+          Verdict(
+              status="fail",
+              reason=(
+                  f"Join_hint {hint.from_table}.{hint.from_column} -> "
+                  f"{hint.to_table}.{hint.to_column} nối hai vai trò khóa "
+                  f"khác nhau ({from_role} với {to_role})."
+              ),
+          ),
+          state={},
+      )
   return _verdict_event(
-      Verdict(status="ok", reason="Join_hints tham chiếu đúng bảng/cột."),
+      Verdict(
+          status="ok",
+          reason="Join_hints tham chiếu đúng bảng/cột và tương thích vai trò.",
+      ),
       state={"schema_meta": node_input.model_dump(), "last_error": ""},
   )
 
@@ -762,9 +1027,17 @@ def mark_header_fallback(raw_tables: list[dict] | None = None) -> Event:
   """
   tables = raw_tables or []
   final = {table["table_id"]: table["header"] for table in tables}
+  final_rows = {
+      table["table_id"]: table.get("header_row", -1) for table in tables
+  }
   return Event(
       output={"fallback": "header_rule"},
-      state={"headers_final": final, "header_fallback": True, "last_error": ""},
+      state={
+          "headers_final": final,
+          "header_rows_final": final_rows,
+          "header_fallback": True,
+          "last_error": "",
+      },
   )
 
 

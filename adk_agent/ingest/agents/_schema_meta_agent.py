@@ -49,6 +49,11 @@ Quy tắc bắt buộc:
   rõ bảng nguồn, cột nguồn, bảng đích, cột đích và evidence ngắn
   (tên cột chung và vai trò của nó). Không có bằng chứng tên/vai trò
   thì để danh sách rỗng, không đoán join.
+- TUYỆT ĐỐI không join trên cột có vai trò payment, status, money hay
+  quantity (ví dụ nối theo phương thức thanh toán): các cột đó không
+  phải khóa thực thể, join theo chúng sẽ fan-out nhiều-nhiều và bị
+  validator bác. Hai đầu join phải cùng một vai trò khóa, hoặc ít nhất
+  một đầu chưa biết vai trò (unknown) thì mới được ghi.
 - notes ghi bẫy của shop suy ra từ tên bảng/cột nếu có (ví dụ bảng lô
   không được cộng dồn vào doanh thu, giá theo ngày nằm ở bảng lịch sử
   giá); không thấy bẫy thì để rỗng.

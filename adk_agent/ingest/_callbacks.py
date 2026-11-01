@@ -54,7 +54,10 @@ RESULT_STRING_MAX_CHARS = 8000
 # - TableSchema: table_id lạ so với bản nháp -> validator so trường đã đo
 #   sẽ fail (bảng sai, cột rỗng so với bản nháp).
 # - MergeProposal: single lạ không có trong dữ liệu quét -> validator fail.
-# - HeaderProposal: danh sách rỗng trong khi còn bảng mơ hồ -> fail.
+# - HeaderProposal: bảng lạ không tồn tại trong dữ liệu quét ->
+#   validator fail (validator mới còn bác cả đề xuất rỗng khi còn bảng
+#   mơ hồ, xem validate_header — hai lớp chắn độc lập cho cùng một
+#   bất biến "sentinel luôn bị loại").
 # - ShopMeta: join trỏ tới bảng/cột không tồn tại -> validator tham chiếu
 #   fail (sau đủ lượt thì rơi về fallback meta rỗng, shop vẫn tiếp tục).
 # Sentinel KHÔNG được mang dữ liệu thật nào (để không bao giờ vô tình
@@ -70,7 +73,13 @@ _INVALID_JSON_SENTINELS: dict[type, dict[str, Any]] = {
         "singles": ["__invalid_json__"],
     },
     HeaderProposal: {
-        "tables": [],
+        "tables": [
+            {
+                "table_id": "__invalid_json__",
+                "header_row": -1,
+                "columns": ["__invalid_json__"],
+            }
+        ],
     },
     ShopMeta: {
         "join_hints": [
@@ -99,6 +108,13 @@ def make_after_model_json_guard(output_schema: Any) -> Any:
   của bước sẽ bác sentinel này như một lỗi thường, đi vào retry hoặc
   fallback thay vì giết cả workflow.
 
+  Response cuối không có text cũng bị thay bằng sentinel (không giữ
+  nguyên như bản đầu): ADK bỏ qua response rỗng ở bước save nhưng bước
+  sau đó (llm_agent_wrapper) đặt event.output = None, rồi function node
+  coerce None theo type hint của validator và raise ValidationError —
+  đúng lớp crash vụ biz_127, chỉ khác trigger. Thay sentinel ngay từ
+  guard thì response rỗng cũng thành Verdict fail bình thường.
+
   Args:
     output_schema: Model Pydantic của output_schema mà agent dùng
       (TableSchema, MergeProposal, HeaderProposal hoặc ShopMeta).
@@ -107,9 +123,10 @@ def make_after_model_json_guard(output_schema: Any) -> Any:
 
   Returns:
     Hàm callback after_model (nhận callback_context và llm_response,
-    trả LlmResponse đã sửa khi JSON lỗi, None khi giữ nguyên). Callback
-    bỏ qua response partial (streaming chưa xong — JSON dở dang lúc
-    này là bình thường, chưa phải lỗi) và response không có text.
+    trả LlmResponse đã sửa khi JSON lỗi hoặc response cuối không có
+    text, None khi giữ nguyên). Callback chỉ bỏ qua response partial
+    (streaming chưa xong — JSON dở dang lúc này là bình thường, chưa
+    phải lỗi).
   """
 
   def after_model_json_guard(
@@ -123,9 +140,10 @@ def make_after_model_json_guard(output_schema: Any) -> Any:
       llm_response: Response vừa nhận từ model.
 
     Returns:
-      None khi giữ nguyên response (hợp lệ, partial, hoặc không có
-      text, hoặc schema không có sentinel); LlmResponse mới với nội
-      dung là JSON sentinel khi text cuối không hợp output_schema.
+      None khi giữ nguyên response (hợp lệ, partial, hoặc schema không
+      có sentinel); LlmResponse mới với nội dung là JSON sentinel khi
+      text cuối không hợp output_schema hoặc response cuối không có
+      text (không part text, hoặc text toàn khoảng trắng).
     """
     _ = callback_context
     sentinel = _INVALID_JSON_SENTINELS.get(output_schema)
@@ -133,20 +151,9 @@ def make_after_model_json_guard(output_schema: Any) -> Any:
       return None
     if getattr(llm_response, "partial", False):
       return None
-    content = getattr(llm_response, "content", None)
-    parts = getattr(content, "parts", None) if content is not None else None
-    if not parts:
-      return None
-    text = "".join(
-        part.text
-        for part in parts
-        if getattr(part, "text", None) and not getattr(part, "thought", False)
-    )
-    if not text.strip():
-      return None
-    try:
-      validate_schema(output_schema, text)
-    except Exception:
+
+    def _sentinel_response() -> LlmResponse:
+      """Đóng gói JSON sentinel thành LlmResponse thay thế."""
       return llm_response.model_copy(
           update={
               "content": types.Content(
@@ -159,6 +166,24 @@ def make_after_model_json_guard(output_schema: Any) -> Any:
               )
           }
       )
+    content = getattr(llm_response, "content", None)
+    parts = getattr(content, "parts", None) if content is not None else None
+    if not parts:
+      # Response cuối không có part nào: thay sentinel để bước sau
+      # không nhận output None rồi coerce lỗi (xem docstring ngoài).
+      return _sentinel_response()
+    text = "".join(
+        part.text
+        for part in parts
+        if getattr(part, "text", None) and not getattr(part, "thought", False)
+    )
+    if not text.strip():
+      # Response cuối toàn khoảng trắng: cũng là "không có text".
+      return _sentinel_response()
+    try:
+      validate_schema(output_schema, text)
+    except Exception:
+      return _sentinel_response()
     return None
 
   return after_model_json_guard

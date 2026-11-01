@@ -194,6 +194,27 @@ def test_deterministic_merge_groups_lot_variant_no_lock() -> None:
   assert deterministic_merge_groups(tables) == []
 
 
+def test_deterministic_merge_groups_lot_variant_real_names_no_lock() -> None:
+  """Cặp lô thật biz_119 (lo nằm giữa id) cũng không bị khóa."""
+  tables = [
+      {
+          "table_id": "danhsachhoadonchitiet_sheet1",
+          "source_file": "DanhSachHoaDonChiTiet.xlsx",
+          "source_sheet": "Sheet1",
+          "column_signature": "ma|so_luong|tien",
+          "row_count": 10,
+      },
+      {
+          "table_id": "danhsachhoadonchitietlo_sheet1",
+          "source_file": "DanhSachHoaDonChiTietLo.xlsx",
+          "source_sheet": "Sheet1",
+          "column_signature": "ma|so_luong|tien",
+          "row_count": 12,
+      },
+  ]
+  assert deterministic_merge_groups(tables) == []
+
+
 def test_deterministic_merge_groups_sqlite_no_lock() -> None:
   """Shop SQLite thì không khóa bảng nào (mỗi bảng là một thực thể riêng)."""
   tables = [

@@ -60,6 +60,40 @@ _phase1_text_utils = _load_phase1_module(
     "datamate_phase1_text_utils", "text_utils.py"
 )
 
+# Từ đồng nghĩa bổ sung riêng cho khung ADK (không sửa file phase1):
+# map_columns đọc từ điển COLUMN_SYNONYMS của module phase1 lúc gọi, nên
+# mở rộng dict đó trong bộ nhớ (trên module nạp riêng
+# "datamate_phase1_ingest", không phải module "ingest" mà test phase1
+# dùng) là đủ để map_columns chấp nhận thêm cách gọi mới. Đây là các
+# biến thể chung gặp trên train, KHÔNG gắn với shop nào: 'tien' đơn lẻ
+# (từ khoá một từ chỉ khớp chính xác nên không cướp cột 'tien ban'),
+# 'tong' đơn lẻ, 'tong sau giam gia' và biến thể (cơ số công nợ),
+# 'gia moi'/'gia cu' và biến thể (lịch sử giá), 'da thu' (tiền đã thu),
+# 'tien ban' (tiền dòng), 'can tra' (nợ phải trả), 'so tien' (tiền
+# chung — 'so tien no' vẫn thắng nhờ khớp tuyệt đối 100 so với 85).
+# Cách gọi nào cũng chỉ ảnh hưởng cách format tiền (mọi semantic tiền
+# đều parse bằng parse_money), nên map nhầm giữa các semantic tiền vẫn
+# format đúng; semantic chỉ là nhãn trong manifest, role thật do
+# SchemaTableAgent gán sau từ mẫu và mô tả.
+_ADK_EXTRA_SYNONYMS: dict[str, list[str]] = {
+    "line_amount": ["tien", "tien ban", "tong", "so tien"],
+    "order_total": ["tong sau giam gia", "tong tien sau giam gia", "tong sau giam"],
+    "unit_price": ["gia moi", "gia ban moi", "gia cu", "gia ban cu"],
+    "amount_paid": ["da thu"],
+    "amount_due": ["can tra"],
+}
+for _semantic, _synonyms in _ADK_EXTRA_SYNONYMS.items():
+  _existing = _phase1_ingest.COLUMN_SYNONYMS.setdefault(_semantic, [])
+  for _synonym in _synonyms:
+    if _synonym not in _existing:
+      _existing.append(_synonym)
+
+# Riêng _header_score là hàm private của phase1 nhưng vẫn được expose
+# qua adapter vì nó là phép tính thuần túy (không đọc file), và tầng
+# đọc cần đúng hàm chấm điểm này để phát hiện trường hợp hòa/sát điểm
+# (viết lại hàm chấm điểm ở đây sẽ lệch dần với phase1 theo thời gian).
+header_score = _phase1_ingest._header_score
+
 # Các hàm public của phase1 được export lại dưới tên rõ ràng để code
 # ingest chỉ import từ adapter này, không import trực tiếp từ phase1.
 detect_header_row = _phase1_ingest.detect_header_row
@@ -72,6 +106,7 @@ normalize_key = _phase1_text_utils.normalize_key
 
 __all__ = [
     "detect_header_row",
+    "header_score",
     "map_columns",
     "parse_money",
     "parse_date",

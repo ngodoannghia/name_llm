@@ -16,7 +16,7 @@ from google.adk import Event
 from .._config import IngestConfig
 from .._models import RawTable
 from .._readers import list_data_files, read_readme_text, read_source_tables
-from ._validate_nodes import _lot_variant_name
+from ._validate_nodes import _lot_base_for_table
 
 
 def make_init_shop(config: IngestConfig) -> Callable:
@@ -219,6 +219,12 @@ def header_gate(raw_tables: list[dict] | None = None) -> Event:
       output=output,
       state={
           "headers_final": _candidate_headers(tables),
+          # Dòng header mặc định là dòng quét đã chọn; validator sẽ ghi
+          # đè bằng dòng khớp với đề xuất khi loop chạy, và node làm
+          # sạch dùng đúng dòng này (không detect lại).
+          "header_rows_final": {
+              table["table_id"]: table.get("header_row", -1) for table in tables
+          },
           "header_summary_text": output,
       },
       route=route,
@@ -249,7 +255,9 @@ def deterministic_merge_groups(
     tiết, khách...), không gộp chỉ vì trùng header.
   - Nhóm nào chứa cả bảng và biến thể lô của nó (ChiTiet/ChiTietLo)
     thì không khóa: gộp hai biến thể này sẽ đếm trùng dòng chi tiết,
-    để LLM + validator giữ riêng như trước.
+    để LLM + validator giữ riêng như trước. Biến thể lô được phát hiện
+    trên tên file/sheet gốc (xem _lot_base_for_table), vì hậu tố lô
+    của file nằm giữa table_id nên trừ đuôi id sẽ mù.
 
   Args:
     raw_tables: Danh sách RawTable đã dump (lấy từ state).
@@ -265,7 +273,9 @@ def deterministic_merge_groups(
     return []
   by_key: dict[tuple[str, ...], list[str]] = {}
   key_order: list[tuple[str, ...]] = []
+  by_id: dict[str, dict] = {}
   for table in raw_tables or []:
+    by_id[table["table_id"]] = table
     signature = table.get("column_signature", "") or ""
     key = tuple(sorted(part for part in signature.split("|") if part))
     if not key:
@@ -279,9 +289,11 @@ def deterministic_merge_groups(
     table_ids = by_key[key]
     if len(table_ids) < 2:
       continue
-    # Cấm biến thể lô: nếu hai id trong nhóm chỉ khác nhau ở hậu tố
-    # lô thì nhóm này không khóa (an toàn hơn gộp sai gây đếm trùng).
-    bases = [_lot_variant_name(table_id) for table_id in table_ids]
+    # Cấm biến thể lô: nếu hai bảng trong nhóm chỉ khác nhau ở hậu tố
+    # lô trong tên file/sheet GỐC thì nhóm này không khóa (an toàn hơn
+    # gộp sai gây đếm trùng). Phát hiện trên tên gốc, không trên đuôi
+    # table_id, vì hậu tố lô của file nằm giữa id (xem _lot_base).
+    bases = [_lot_base_for_table(by_id[table_id]) for table_id in table_ids]
     if len(set(bases)) != len(table_ids):
       continue
     locked.append(

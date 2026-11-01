@@ -156,7 +156,11 @@ Quy tắc parse một ô ngày:
 
 1. Sau khi gộp và làm sạch, các dòng giống hệt nhau trên toàn bộ cột
    (sau khi đã chuẩn hóa tiền/ngày/số lượng) được coi là trùng lặp và
-   chỉ giữ một dòng, số dòng đã bỏ được đếm.
+   chỉ giữ một dòng, số dòng đã bỏ được đếm — NHƯNG chỉ khi bảng có cột
+   mã đơn (ngữ nghĩa order_id). Rulebook §8 chỉ coi "2 dòng giống hệt
+   của cùng 1 đơn" là lỗi export; bảng không có mã đơn thì hai dòng
+   giống hệt nhau không chứng minh được là cùng một đơn (có thể là hai
+   lần bán riêng) nên phải giữ nguyên toàn bộ dòng, không dedup.
 2. Các dòng gần giống nhưng khác nhau ở bất kỳ cột giá trị nào (tiền,
    số lượng, trạng thái, ngày) thì **không** được dedup. Đó có thể là
    hai dòng thật khác nhau, hoặc là mâu thuẫn cần giữ lại để bước sau
@@ -197,6 +201,10 @@ Sau khi code làm sạch chạy xong, mỗi bảng có:
 
 - Các DataFrame đã sạch trong bộ nhớ tạm của node (không đưa vào state,
   state chỉ giữ thống kê và đường dẫn tạm).
+- Cột TEXT nào trông như cột tiền bị map sót (ít nhất 80% mẫu parse
+  được thành tiền và mẫu chứa dấu bẩn như dấu phẩy, 'đ', 'k', 'tr')
+  thì được gắn cờ `suspected_money` trong manifest — chỉ cảnh báo để
+  schema/QA biết, không tự format bừa khi ngữ nghĩa chưa chắc.
 - Thống kê làm sạch `_clean_stats`: số dòng vào, số dòng ra, số dòng
   trùng đã bỏ, số ô NULL do không parse được (theo từng cột và từng lý
   do: tiền, ngày, số lượng, thiếu hệ số), số ô đã forward-fill.
